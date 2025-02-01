@@ -1,5 +1,4 @@
 import asyncio
-import inspect
 import json
 import logging
 
@@ -7,9 +6,9 @@ import streamlit as st
 
 from src.config import config
 from src.llm_helper import chat
-from src.tools import brave, filesystem
 from src.ui import render_system_prompt_editor
 from src.prompts import SystemPrompt
+from src.tools.registry import ToolRegistry
 
 # Configure logging
 logging.basicConfig(filename='debug.log', level=logging.DEBUG)
@@ -70,44 +69,19 @@ def process_user_input():
         st.session_state.messages.append({"role": "user", "content": user_prompt})
 
 def load_tools_from_functions():
+    """Load tools from the registry for LLM usage"""
     tools = []
-    available_functions = {
-        'brave': brave,
-        'filesystem': filesystem
-    }
-    
-    for name, func in available_functions.items():
-        sig = inspect.signature(func)
-        params = {}
-        
-        for param_name, param in sig.parameters.items():
-            param_type = 'string'  # default
-            if param.annotation == int:
-                param_type = 'integer'
-            elif param.annotation == list:
-                param_type = 'array'
-            elif param.annotation == dict:
-                param_type = 'object'
-                
-            params[param_name] = {
-                'type': param_type,
-                'description': '',  # Let the docstring explain the parameters
-            }
-            
-            # Add default value if one exists
-            if param.default != param.empty:
-                params[param_name]['default'] = param.default
-
+    for name, tool in ToolRegistry.get_all_tools().items():
         tools.append({
             'type': 'function',
             'function': {
                 'name': name,
-                'description': func.__doc__,
+                'description': tool.description,
                 'parameters': {
                     'type': 'object',
-                    'properties': params
+                    'properties': tool.parameters
                 },
-                'is_async': asyncio.iscoroutinefunction(func)
+                'is_async': True
             }
         })
     return tools
@@ -143,29 +117,11 @@ def generate_response(model, use_tools):
                         content = f"**Function Call ({function_name}):**\n```json\n{json.dumps(function_args, indent=2)}\n```"
                         st.markdown(content)
                     
-                    available_functions = {
-                        'brave': {'func': brave, 'is_async': True},
-                        'filesystem': {'func': filesystem, 'is_async': True}
-                    }
-
-                    if function_name in available_functions:
-                        func_info = available_functions[function_name]
+                    if function_name in ToolRegistry.get_all_tools():
+                        tool = ToolRegistry.get_tool(function_name)
                         try:
-                            # Parse arguments if they're a string
                             args = function_args if isinstance(function_args, dict) else json.loads(function_args)
-                            
-                            logging.debug(f"Calling {function_name} with args: {args}")
-                            
-                            if func_info['is_async']:
-                                try:
-                                    function_response = asyncio.run(func_info['func'](**args))
-                                    if isinstance(function_response, dict) and 'error' in function_response:
-                                        raise Exception(function_response['error'])
-                                except Exception as e:
-                                    logging.error(f"Async function error: {str(e)}", exc_info=True)
-                                    raise
-                            else:
-                                function_response = func_info['func'](**args)
+                            function_response = asyncio.run(tool.execute(**args))
                             
                             logging.debug(f"Function response: {function_response}")
                             
