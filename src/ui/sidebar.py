@@ -28,5 +28,11 @@ Your instructions will be added to the base system prompt."""
         # Store in session state
         st.session_state['additional_instructions'] = additional_instructions
 
+        # Combine base prompt with additional instructions to create full system prompt
+        full_system_prompt = SystemPrompt.BASE_PROMPT
         if additional_instructions:
+            full_system_prompt = f"{SystemPrompt.BASE_PROMPT}\n\nAdditional Instructions:\n{additional_instructions}"
             st.info("✓ Additional instructions active")
+        
+        # Store the complete system prompt in session state
+        st.session_state['system_prompt'] = full_system_prompt

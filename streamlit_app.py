@@ -89,16 +89,29 @@ def load_tools_from_functions():
 def generate_response(model, use_tools):
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         with st.spinner('Generating response...'):
-            # Get current system prompt
-            system_prompt = SystemPrompt(
-                additional_instructions=st.session_state.get('additional_instructions')
-            ).get_full_prompt()
-            
-            # Add system prompt to messages
-            messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
-            
             tools = load_tools_from_functions() if use_tools else []
-            response = chat(messages, model=model, tools=tools, stream=False)
+            
+            # Create messages list with system prompt
+            messages = []
+            
+            # Add system prompt if it exists
+            system_prompt = st.session_state.get('system_prompt')
+            if system_prompt:
+                messages.append({
+                    "role": "system",
+                    "content": system_prompt
+                })
+            
+            # Add conversation history
+            messages.extend(st.session_state.messages)
+            
+            response = chat(
+                messages, 
+                model=model, 
+                tools=tools, 
+                stream=False,
+                additional_instructions=st.session_state.get('additional_instructions', '')
+            )
             
             if "tool_calls" in response['message']:
                 assistant_message = response['message']
@@ -123,7 +136,7 @@ def generate_response(model, use_tools):
                             args = function_args if isinstance(function_args, dict) else json.loads(function_args)
                             function_response = asyncio.run(tool.execute(**args))
                             
-                            logging.debug(f"Function response: {function_response}")
+                            logging.warning(f"Function response: {function_response}")
                             
                             tool_message = {
                                 'role': 'function',
@@ -131,6 +144,7 @@ def generate_response(model, use_tools):
                                 'content': str(function_response)
                             }
                             st.session_state.messages.append(tool_message)
+                            messages.append(tool_message)
                             with st.chat_message("tool"):
                                 st.markdown(tool_message['content'])
                         except Exception as e:

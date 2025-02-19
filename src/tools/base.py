@@ -24,3 +24,8 @@ class BaseTool(ABC):
     def parameters(self) -> Dict:
         """Tool parameters schema"""
         pass
+
+    @property
+    def prompt(self) -> str:
+        """Tool-specific prompt"""
+        return ""  # Default empty prompt, can be overridden by tools

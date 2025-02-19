@@ -3,9 +3,12 @@ import asyncio
 from typing import Any
 from dotenv import load_dotenv
 from .mcp_client import mcp
+from .tools.registry import ToolRegistry
 
 # Load environment variables
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 async def brave(action: str, query: str = "", count: int = 5, offset: int = 0) -> Any:
     """
@@ -144,14 +147,53 @@ async def filesystem(action: str, path: str = "", content: str = "") -> Any:
             )
         }
 
+async def alpha(operationId: str, **params) -> Any:
+    """
+    Alpha API for crypto analytics and reporting
+    
+    Operations:
+    - API-search_coins_api_coin_get
+    - API-generate_report_api_api_generate_report_get
+    - API-get_raw_report_api_report_raw__id__get
+    
+    Features:
+    - Token search 
+    - Report Generation
+    - Report management
+    """
+    logger.info(f"Alpha helper called - Endpoint: {operationId}, Raw Params: {params}")
+    
+    # Check if Alpha API tool is available
+    tool = ToolRegistry.get_tool("alpha-api")
+    if not tool:
+        error_msg = "Alpha API tool is not available. Check configuration and OpenAPI spec."
+        logger.error(error_msg)
+        return {"error": error_msg}
+    
+    try:
+        # Call the tool through the registry
+        logger.debug(f"Executing Alpha API tool for operationId {operationId} with params: {params}")
+        response = await tool.execute(operationId, params)
+        logger.debug(f"Alpha API response: {response}")
+        return response
+            
+    except Exception as e:
+        error_msg = f"Alpha API failed: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {"error": error_msg}
+
 if __name__ == "__main__":
     async def main():
         # Test Brave
-        print(await brave("help"))
-        print(await brave("web", "Python programming", count=2))
+        # print(await brave("help"))
+        # print(await brave("web", "Python programming", count=2))
         
-        # Test Filesystem
-        print(await filesystem("help"))
-        print(await filesystem("read", "/tmp/test.txt"))
+        # # Test Filesystem
+        # print(await filesystem("help"))
+        # print(await filesystem("read", "/tmp/test.txt"))
+        
+        # Test Alpha API
+        print(await alpha("/api/coin", search="DOGE"))
+        print(await alpha("/api/ohlc", address="0x123..."))
 
     asyncio.run(main())
