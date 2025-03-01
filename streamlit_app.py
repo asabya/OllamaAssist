@@ -99,28 +99,55 @@ def generate_response(model, use_tools):
                 tools = load_tools_from_functions() if use_tools else []
                 messages = []
                 
+                # Get character YAML from session state
+                character_yaml = st.session_state.get('character_yaml', '')
+                if character_yaml:
+                    print(f"\n=== Character YAML Found ===")
+                    print(f"Length: {len(character_yaml)} characters")
+                    print(f"Preview: {character_yaml[:100]}...")
+                
                 # Add system prompt if it exists
                 system_prompt = st.session_state.get('system_prompt')
                 if system_prompt:
+                    print(f"\n=== System Prompt Found ===")
+                    print(f"Length: {len(system_prompt)} characters")
+                    print(f"Preview: {system_prompt[:200]}...")
+                    
                     messages.append({
                         "role": "system",
                         "content": system_prompt
                     })
+                else:
+                    print("\n=== WARNING: No system prompt found! ===")
                 
                 # Add conversation history
                 messages.extend(st.session_state.messages)
                 
-                # First call - always non-streaming to check for tool use
+                # Debug log all messages
+                print(f"\n=== Message Count: {len(messages)} ===")
+                for i, msg in enumerate(messages):
+                    role = msg.get('role', 'unknown')
+                    content_preview = msg.get('content', '')[:50] if isinstance(msg.get('content', ''), str) else 'non-text content'
+                    print(f"Message {i}: role={role}, content preview: {content_preview}...")
+                
+                print("\n=== Making initial API call ===")
                 response = chat(
                     messages=messages, 
                     model=model or config.DEFAULT_MODEL,
+                    character_yaml=character_yaml,
                     tools=tools,
-                    stream=False
+                    stream=True
                 )
                 
-                # Handle tool calls
+                print("\n=== Checking response type ===")
+                print(f"Response type: {type(response)}")
+                
+                # Handle tool calls or stream response
                 if isinstance(response, dict) and 'tool_calls' in response:
+                    print("\n=== Tool call detected ===")
                     tool_calls = response['tool_calls']
+                    print(f"Tool calls: {json.dumps(tool_calls, indent=2)}")
+                    
                     assistant_message = {
                         "role": "assistant",
                         "tool_calls": tool_calls
@@ -136,13 +163,13 @@ def generate_response(model, use_tools):
                         logging.debug(f"Arguments content: {function_args}")
                         
                         with st.chat_message("tool"):
-                            content = f"**Function Call ({function_name}):**\n```json\n{json.dumps(function_args, indent=2)}\n```"
+                            content = f"**Function Call ({function_name}):**\n```json\n{function_args}\n```"
                             st.markdown(content)
                         
                         if function_name in ToolRegistry.get_all_tools():
                             tool = ToolRegistry.get_tool(function_name)
                             try:
-                                args = function_args if isinstance(function_args, dict) else json.loads(function_args)
+                                args = json.loads(function_args) if isinstance(function_args, str) else function_args
                                 function_response = asyncio.run(tool.execute(**args))
                                 
                                 tool_message = {
@@ -152,61 +179,67 @@ def generate_response(model, use_tools):
                                 }
                                 st.session_state.messages.append(tool_message)
                                 messages.append(tool_message)
-                                with st.chat_message("tool"):
-                                    st.markdown(tool_message['content'])
+                                # with st.chat_message("tool"):
+                                #     st.markdown(tool_message['content'])
                             except Exception as e:
                                 error_message = f"Error executing {function_name}: {str(e)}"
                                 logging.error(f"Error details - Args: {function_args}, Error: {str(e)}")
                                 st.error(error_message)
                                 logging.error(error_message)
 
-                    # Get final response - non-streaming
+                    # Get final response with streaming
                     final_response = chat(
                         messages=messages,
                         model=model or config.DEFAULT_MODEL,
-                        stream=False
+                        character_yaml=character_yaml,
+                        stream=True
                     )
                     
                     with st.chat_message("assistant"):
-                        # Handle response from Anthropic API
-                        if hasattr(final_response, 'content'):
-                            response_text = final_response.content[0].text
-                            st.markdown(response_text)
-                            st.session_state.messages.append({
-                                "role": "assistant", 
-                                "content": response_text
-                            })
-                        elif isinstance(final_response, str):
-                            st.markdown(final_response)
-                            st.session_state.messages.append({
-                                "role": "assistant", 
-                                "content": final_response
-                            })
-                        else:
-                            # Fallback for other response formats
-                            response_text = str(final_response)
-                            st.markdown(response_text)
-                            st.session_state.messages.append({
-                                "role": "assistant", 
-                                "content": response_text
-                            })
+                        message_placeholder = st.empty()
+                        full_response = ""
+                        
+                        # Handle streaming response
+                        print("\n=== Starting stream ===")
+                        for chunk in final_response:
+                            if chunk:
+                                full_response += chunk
+                                message_placeholder.markdown(full_response + "▌")
+                        
+                        print(f"\n=== Final response ===\n{full_response}")
+                        # Final update without cursor
+                        message_placeholder.markdown(full_response)
+                        
+                        # Add to message history
+                        st.session_state.messages.append({
+                            "role": "assistant", 
+                            "content": full_response
+                        })
                 
                 else:
+                    print("\n=== Regular response detected ===")
                     # Regular response without tool calls
                     with st.chat_message("assistant"):
-                        if hasattr(response, 'content'):
-                            response_text = response.content[0].text
-                            st.markdown(response_text)
-                            st.session_state.messages.append({
-                                "role": "assistant", 
-                                "content": response_text
-                            })
-                        else:
-                            st.markdown(response)
-                            st.session_state.messages.append({
-                                "role": "assistant", 
-                                "content": response
-                            })
+                        message_placeholder = st.empty()
+                        full_response = ""
+                        
+                        # Handle streaming response
+                        print("\n=== Starting stream ===")
+                        for chunk in response:
+                            print(f"Chunk received: {chunk}")
+                            if chunk:
+                                full_response += chunk
+                                message_placeholder.markdown(full_response + "▌")
+                        
+                        print(f"\n=== Final response ===\n{full_response}")
+                        # Final update without cursor
+                        message_placeholder.markdown(full_response)
+                        
+                        # Add to message history
+                        st.session_state.messages.append({
+                            "role": "assistant", 
+                            "content": full_response
+                        })
 
             except Exception as e:
                 error_msg = f"Error generating response: {str(e)}"

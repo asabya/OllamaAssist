@@ -25,7 +25,8 @@ class AlphaApiTool(BaseTool):
 2. Generate Report
    - 'generate_report' with 'address' parameter
    - Only use addresses that were returned in the search results
-
+   - Do not analyse anything just return the id from the response
+   
 3. Get Report
    - 'get_report' with 'id' parameter
 
@@ -152,8 +153,6 @@ Summarise key insights from the report, potential investment opportunities, and 
         try:
             response = await mcp(**mcp_args)
             logger.info(f"Alpha API response received for {operation_id}")
-            logger.debug(f"Response type: {type(response)}")
-            logger.debug(f"Response attributes: {dir(response)}")
 
             # Handle string response
             if isinstance(response, str):

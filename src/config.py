@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 class Config:
     # Application settings
-    PAGE_TITLE = "Streamlit+Claude+MCP"
+    PAGE_TITLE = "MCP Client"
     DEFAULT_MODEL = "claude-3-5-sonnet-latest"  # Default Claude model
 
     def __init__(self):
