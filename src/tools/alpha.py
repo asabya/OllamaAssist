@@ -1,208 +1,287 @@
-from typing import Any, Dict
+from typing import Any, Dict, Literal, ClassVar, Type, Optional, List, Union
 import logging
 import json
-from .base import BaseTool
+from pydantic import BaseModel, Field, ConfigDict
+from langchain.tools import StructuredTool
+from langchain.schema import AIMessage, HumanMessage, BaseMessage
+from langchain_core.output_parsers import StrOutputParser
 from ..mcp_client import mcp
+from pydantic import field_validator
 
 # Initialize logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-class AlphaApiTool(BaseTool):
-    PROMPT = """You are a Crypto Analytics Expert using the Alpha API. Follow these guidelines strictly:
+PROMPT = """You are a Crypto Analytics Expert strictly using the Alpha API. Follow these guidelines exactly:
 
-1. Search Capabilities
-   - Use 'search' with 'search' parameter
-   - The response will contain a list of coins with their details
-   - ONLY use the data from the actual API response
-   - DO NOT make up or hallucinate any additional information
-   - For search results, only return the following fields in your response:
-     * name
-     * symbol
-     * address
-   - Format the response as a clear list of found coins
-   - The response might contain multiple instances of the same token name. just display name,symbol, address for each instance
-2. Generate Report
-   - 'generate_report' with 'address' parameter
-   - Only use addresses that were returned in the search results
-   - Do not analyse anything just return the id from the response
-   
-3. Get Report
-   - 'get_report' with 'id' parameter
+1. SEARCH
+   - Use `command: search` with a `search` parameter.
+   - The response contains a list of coins and their metadata.
+   - Do NOT generate any information beyond what the API returns.
+   - ONLY return the following fields for each token found: `name`, `symbol`, `address`
+   - Format as a clean list. Do not merge or deduplicate.
 
-4. Use the address from 'API-search_coins_api_coin_get' to call 'API-generate_report_api_api_generate_report_get'.
+2. GENERATE REPORT
+   - Use `command: generate_report` with the `address` of a token.
+   - the `address` can be in the message or in the context.
+   - From the response, extract ONLY the `id`. Do NOT describe, summarize, or analyze the token.
+   - Format as a clean list. Do not merge or deduplicate.
 
-5. Use the id from 'API-generate_report_api_api_generate_report_get' to get the raw report.
+3. RUMOUR SUBMISSION
+   - Use `command: rumour` with a `message` that includes:
+     * Wallet address
+     * Message body
+     * Token name
+     * Token address
+   - If any of these are missing, prompt the user to provide the missing fields.
+   - Send requests using `message` and `source` as query params.
+   - If user provides instructions across multiple messages, merge them into one.
+   - `command` should always be `rumour` not `rumor`
 
-6. Parameters format:
-   - Search: { "search": "michi" }
-   - Generate report: { "address": "5mbK36SZ7J19An8jFochhQS4of8g6BwUjbeCSxBSoWdp" }
-   - Get report: { "id": "1234567890" }
+4. INTEGRITY RULES
+   - Do NOT infer or hallucinate any information.
+   - Do NOT estimate token supply, market cap, or risks unless directly provided.
+   - Do NOT provide financial advice or sentiment interpretation.
+   - Do NOT generate reports or summaries based on retrieved data.
+   - Your role is to retrieve data via tools only, not to interpret it.
+   - Always respond in the same format as described in the system prompt, even for errors.
 
-IMPORTANT: Never invent or hallucinate information. Only use data that is actually returned by the API.
+5. PARAMETER EXAMPLES
+   - Search: `{{ 'search': 'pepe' }}`
+   - Generate Report: `{{ 'address': '...' }}`
+   - Rumour: `{{ 'message': '...' }}`
+
+6. OUTPUT FORMAT
+   - Always respond in the same format as described in the system prompt
+   - If the CallToolResult has an error, return the error in the same format as described in the system prompt
+
+REMEMBER: Your job is to call the appropriate Alpha API tools and return the API data only. Never summarize, conclude, or advise based on retrieved data.
 """
-    GENERATE_REPORT_PROMPT = """generate a detailed investor report for the token attached based on the following structure and the data inside the provided yml file:
-Overview. But do not just list numeric data, comment with textual information, on the numbers provided:
 
-    Current Price: (if available)
-    Market Capitalization: (if available)
-    Total Supply: (if available)
-    Circulating Supply: (if available)
-    24h Volume: (if available)
-    All-Time High (ATH): (price and date, if available)
-    Biggest Buyer: (holder with the highest transaction volume/amount)
+class TextOutputParser:
+    """Parser for handling various types of text output from the API"""
+    
+    @staticmethod
+    def parse(response: Any) -> Union[str, Dict, List]:
+        """Parse response into a usable format"""
+        # Extract content from response
+        if isinstance(response, BaseMessage):
+            content = response.content
+        elif hasattr(response, 'content'):
+            content = response.content
+        else:
+            content = response
 
-## Historical Context
+        # Handle string content
+        if isinstance(content, str):
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                return content
+                
+        return content
 
-Provide a brief history of the token, its launch details, and any major milestones (if available).
-Ownership Structure
+class AlphaToolInput(BaseModel):
+    """Input schema for Alpha API tool"""
+    command: Literal["search", "generate_report", "rumour"] = Field(
+        description="Command to execute (search/generate_report/rumour)"
+    )
+    search: Optional[str] = Field(
+        default=None,
+        description="Search term for the search command"
+    )
+    address: Optional[str] = Field(
+        default=None,
+        description="Token address for the generate_report command"
+    )
+    message: Optional[str] = Field(
+        default=None,
+        description="Message for the rumour command"
+    )
 
-## Display the top token holders in a table or pie chart, including:
+    class Config:
+        extra = "forbid"
 
-    Address
-    Amount held
-    Percentage of total supply
-    Transaction count
-    Whether the address is an exchange or a contract
+    @field_validator("search")
+    def validate_search(cls, v, info):
+        if info.data.get("command") == "search" and v is None:
+            raise ValueError("search parameter is required for search command")
+        return v
 
-Comment in textual form on what you think about the listed token holders, what they could do and potential risks involved. 
+    @field_validator("address")
+    def validate_address(cls, v, info):
+        if info.data.get("command") == "generate_report" and v is None:
+            raise ValueError("address parameter is required for generate_report command")
+        return v
 
-## Market Sentiment
+    @field_validator("message")
+    def validate_message(cls, v, info):
+        if info.data.get("command") == "rumour" and v is None:
+            raise ValueError("message parameter is required for rumour command")
+        return v
 
-This section should be the most detailed, covering:
-
-    Social Media Metrics (Twitter, Telegram, Reddit, Discord)
-        Followers, engagement rates, daily messages/posts
-    Influencer Mentions
-        Summarise key mentions on platforms like Telegram, including tone and impact
-    Community Sentiment Analysis
-        Overall sentiment score: -0.18 (neutral to slightly negative)
-        Growth rate and engagement levels
-
-But do not list bullet point, make the section in text format. If some data is missing, also comment on what that could mean.
-
-
-## Risks and Considerations
-
-Outline potential risks, including:
-
-    Liquidity concerns (if applicable)
-    Market volatility
-    Regulatory risks
-    Security concerns (e.g., contract vulnerabilities)
-
-But do not list bullet point, make the section in text format.
-
-## Conclusion
-
-Summarise key insights from the report, potential investment opportunities, and any critical factors investors should be aware of."""
+class AlphaApiTool(StructuredTool):
+    """Alpha API tool for crypto analytics"""
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    # Tool configuration
+    name: str = "alpha"
+    description: str = "Access crypto analytics and reporting via Alpha API"
+    args_schema: Type[BaseModel] = AlphaToolInput
+    parser: StrOutputParser = Field(default_factory=StrOutputParser)
+    
     # Add operation mappings
-    OPERATIONS = {
+    OPERATIONS: ClassVar[Dict[str, str]] = {
         "search": "API-search_coins_api_coin_get",
         "generate_report": "API-generate_report_api_api_generate_report_get",
-        "get_report": "API-get_yaml_report_api_report_yaml__id__get"
+        "rumour": "API-evaluate_message_post_api_message_post"
     }
 
-    @property
-    def name(self) -> str:
-        return "alpha"
-    
-    @property
-    def description(self) -> str:
-        return "Access crypto analytics and reporting via Alpha API"
-
-    @property
-    def parameters(self) -> Dict:
+    def _format_coin_data(self, coin: Dict[str, Any]) -> Dict[str, str]:
+        """Helper function to format coin data consistently"""
+        if not isinstance(coin, dict):
+            return None
         return {
-            "command": {
-                "type": "string",
-                "description": "Command to execute (search/generate_report/get_report)"
-            },
-            "query": {
-                "type": "string",
-                "description": "Search term, address, or report ID depending on the command"
-            }
+            "name": coin.get("name", ""),
+            "symbol": coin.get("symbol", ""),
+            "address": coin.get("address", "")
         }
-    
-    @property
-    def prompt(self) -> str:
-        return self.PROMPT
+
+    def _parse_response(self, response: Any) -> Union[Dict, List, str]:
+        """Parse response using StrOutputParser and convert to appropriate type"""
+        print(f"Response type: {type(response)}")
+        # Extract content from message types
+        if isinstance(response, BaseMessage):
+            content = response.content
+        elif hasattr(response, 'content'):
+            content = response.content
+        else:
+            content = response
+
+        # Parse to string
+        parsed_str = self.parser.parse(str(content))
         
-    async def execute(self, command: str, query: str) -> Any:
-        """Execute Alpha API operations via MCP"""
-        # Log the incoming request
-        logger.info(f"Alpha API request - Command: {command}, Query: {query}")
+        # Handle streaming response format
+        if isinstance(parsed_str, str) and "data:" in parsed_str:
+            # Extract the final ID from the stream
+            lines = parsed_str.strip().split("\n")
+            for line in reversed(lines):
+                if line.startswith("data: 100 |"):
+                    # Extract the ID after the pipe
+                    return json.dumps({"id": line.split("|")[1].strip()})
         
-        # Map the command to operation ID
-        operation_id = self._get_operation_id(command)
-        if not operation_id:
-            return {"error": f"Invalid command: {command}"}
-            
-        # Prepare parameters based on command
-        params = self._prepare_params(command, query)
-        
-        # Prepare MCP request
-        mcp_args = {
-            "server": "alpha-api",
-            "tool": operation_id,
-            "arguments": params
-        }
-        logger.debug(f"Final MCP arguments: {mcp_args}")
-            
-        # Call the API through MCP
+        # Try to parse as JSON
         try:
+            return json.loads(parsed_str)
+        except json.JSONDecodeError:
+            return parsed_str
+        
+    async def _arun(
+        self,
+        command: str,
+        search: Optional[str] = None,
+        address: Optional[str] = None,
+        id: Optional[str] = None,
+        message: Optional[str] = None
+    ) -> str:
+        """Execute Alpha API operations via MCP"""
+        try:
+            # Log the incoming request
+            logger.info(f"Alpha API request - Command: {command}, Search: {search}, Address: {address}, ID: {id}, Message: {message}")
+            
+            # Map the command to operation ID
+            operation_id = self._get_operation_id(command)
+            if not operation_id:
+                return json.dumps({"error": f"Invalid command: {command}"})
+            
+            # Prepare parameters based on command
+            if command == "search":
+                params = {"search": search, "verified": False}
+            elif command == "generate_report":
+                params = {"address": address}
+            elif command == "rumour":
+                params = {"message": message, "source": "X"}
+            else:
+                return json.dumps({"error": f"Invalid command: {command}"})
+            
+            # Prepare MCP request
+            mcp_args = {
+                "server": "alpha-api",
+                "tool": operation_id,
+                "arguments": params
+            }
+            logger.debug(f"Final MCP arguments: {mcp_args}")
+            
+            # Call the API through MCP
             response = await mcp(**mcp_args)
             logger.info(f"Alpha API response received for {operation_id}")
-
-            # Handle string response
-            if isinstance(response, str):
-                # Check if response matches the expected format
-                if "content=[TextContent(type='text', text=" in response:
-                    # Extract the text content
-                    start = response.find("text='") + 6
-                    end = response.rfind("')")
-                    if start > 6 and end > 0:  # Found valid markers
-                        extracted_text = response[start:end]
-                        if command == "get_report":
-                            return self.GENERATE_REPORT_PROMPT + "\n\n" + extracted_text
-                        else:
-                            try:
-                                return json.loads(extracted_text)
-                            except json.JSONDecodeError:
-                                return extracted_text
+            print(f"\n\nResponse: {response}")
+           
+            # Extract text content from response
+            text_contents = [c.text for c in response.content if hasattr(c, 'text')]
+            if not text_contents:
+                return json.dumps({"error": "No text content in response"})
+            # Join multiple text contents if present
+            content = text_contents[0]
+            print(f"\n\nContent: {content}")
+            
+            # Check for error response in content
+            try:
+                print(f"\n\nContent type: {type(content)}")
+                content_json = json.loads(content) if isinstance(content, str) else content
+                print(f"\n\nContent json: {content_json}")
+                print(f"\n\nContent json type: {isinstance(content_json, dict)}")
+                if isinstance(content_json, dict):
+                    if content_json.get("status") == "error" and "detail" in content_json:
+                        error_detail = content_json["detail"]
+                        return json.dumps({
+                            "error": error_detail.get("error", "Unknown error"),
+                            "details": error_detail.get("info", {})
+                        })
+            except json.JSONDecodeError:
+                pass  # Continue with normal flow if content is not JSON
                 
-                # If it doesn't match the expected format, try regular JSON parsing
+            # Parse the content based on command
+            if command == "search":
                 try:
-                    return json.loads(response)
+                    search_results = json.loads(content)
+                    if isinstance(search_results, list):
+                        results = [
+                            coin_data for coin in search_results
+                            if (coin_data := self._format_coin_data(coin)) is not None
+                        ]
+                        return json.dumps({"coins": results})
                 except json.JSONDecodeError:
-                    return response
-            
-            # Handle object response with content attribute
-            if hasattr(response, 'content'):
-                for content in response.content:
-                    if content.type == 'text':
-                        if command == "get_report":
-                            return self.GENERATE_REPORT_PROMPT + "\n\n" + content.text
-                        else:
-                            return content.text
-            
-            return response
+                    return json.dumps({"error": "Invalid search results format"})
+                
+            elif command == "generate_report":
+                # Extract the final ID from the stream
+                lines = content.strip().split('\\r\\n\\r\\n')
+                for line in reversed(lines):
+
+                    if line.startswith("data: 100 |"):
+                        # Extract the ID after the pipe
+                        return json.dumps({"id": line.split("|")[1].strip()})
+                    
+        
+            # For other commands, try to parse as JSON first
+            try:
+                parsed_content = json.loads(content)
+                return json.dumps(parsed_content)
+            except json.JSONDecodeError:
+                # If not JSON, return as plain message
+                return json.dumps({"message": content})
+                
         except Exception as e:
-            error_msg = f"Alpha API error for {operation_id}: {str(e)}"
+            error_msg = f"Unexpected error in Alpha tool: {str(e)}"
             logger.error(error_msg, exc_info=True)
-            return {"error": error_msg}
+            return json.dumps({"error": error_msg})
 
     def _get_operation_id(self, command: str) -> str:
         """Map user-friendly command to operation ID"""
         return self.OPERATIONS.get(command.lower())
 
-    def _prepare_params(self, command: str, query: str) -> Dict:
-        """Prepare parameters based on command type"""
-        command = command.lower()
-        if command == "search":
-            return {"search": query}
-        elif command == "generate_report":
-            return {"address": query}
-        elif command == "get_report":
-            return {"id": query}
-        return {} 
+    def get_prompt(self) -> str:
+        """Return the tool-specific prompt"""
+        return PROMPT

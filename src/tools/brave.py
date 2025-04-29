@@ -1,9 +1,31 @@
-from typing import Any, Dict
-from .base import BaseTool
+from typing import Any, Dict, ClassVar, Type
+import logging
+from pydantic import BaseModel, Field, ConfigDict
+from langchain.tools import StructuredTool
 from ..mcp_client import mcp
 
-class BraveSearchTool(BaseTool):
-    PROMPT = """ *You are CryptoSocial Analyst v2.3 - an AI specializing in meme coin research via Brave Search. Your protocol:*  
+# Initialize logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+class BraveSearchInput(BaseModel):
+    """Input schema for Brave Search tool"""
+    query: str = Field(
+        description="The search query to execute"
+    )
+
+class BraveSearchTool(StructuredTool):
+    """Brave Search tool for web searches"""
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    # Tool configuration
+    name: str = "brave"
+    description: str = "Search the web using Brave Search"
+    args_schema: Type[BaseModel] = BraveSearchInput
+    
+    # Tool-specific constants
+    PROMPT: ClassVar[str] = """You are CryptoSocial Analyst v2.3 - an AI specializing in meme coin research via Brave Search. Your protocol:
 
 1. **Query Focus**  
    - Auto-detect coin's origin story, mascot, and key community slang  
@@ -50,36 +72,41 @@ class BraveSearchTool(BaseTool):
 - >70% negative sentiment across 3+ platforms  
 - Verified scam reports in Brave-indexed blockchain databases"""
 
-    @property
-    def name(self) -> str:
-        return "brave"
-    
-    @property
-    def description(self) -> str:
-        return "Perform web searches using Brave Search API"
-    
-    @property
-    def parameters(self) -> Dict:
-        return {
-            "query": {
-                "type": "string",
-                "description": "Search query"
-            },
-            "count": {
-                "type": "integer",
-                "description": "Number of results",
-                "default": 5
-            }
-        }
-    
-    @property
-    def prompt(self) -> str:
-        """Return the tool prompt"""
-        return ""
+    async def _arun(self, query: str) -> Any:
+        """Execute Brave search query"""
+        logger.info(f"Brave search request - Query: {query}")
         
-    async def execute(self, query: str, count: int = 5) -> Any:
-        return await mcp(
-            server="brave-search",
-            tool="brave_web_search",
-            arguments={"query": query, "count": count}
-        )
+        try:
+            # Call Brave search through MCP
+            response = await mcp(
+                server="brave-search",
+                tool="API-search_api_search_get",
+                arguments={"q": query}
+            )
+            
+            logger.info("Brave search response received")
+            
+            # Handle string response
+            if isinstance(response, str):
+                return response
+            
+            # Handle object response with content attribute
+            if hasattr(response, 'content'):
+                for content in response.content:
+                    if content.type == 'text':
+                        return content.text
+            
+            return response
+            
+        except Exception as e:
+            error_msg = f"Brave search error: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return {"error": error_msg}
+
+    def get_prompt(self) -> str:
+        """Return the tool-specific prompt"""
+        return self.PROMPT
+
+    def get_args_schema(self) -> Type[BaseModel]:
+        """Return the args schema for the tool"""
+        return self.args_schema

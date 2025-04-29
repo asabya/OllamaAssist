@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Alpha API",
-    "description": "\n🚀 Alpha API - Advanced Crypto Analytics Platform\n\nThis API provides comprehensive analytics and reporting capabilities for cryptocurrency tokens, \nwith a special focus on meme coins and social sentiment analysis.\n\n## Features\n\n* 🔍 Token Search and Analysis\n* 📊 Detailed Market Reports\n* 💹 Price and Trading Analytics\n* 🤖 AI-Powered Sentiment Analysis\n* 📱 Social Media Monitoring\n* 📄 PDF Report Generation\n",
+    "description": "\n🚀 Alpha API - Advanced Crypto Analytics Platform\n\nThis API provides comprehensive analytics and reporting capabilities for cryptocurrency tokens, \nwith a special focus on meme coins and social sentiment analysis.\n\n## Features\n\n* 🔍 Token Search and Analysis\n* 📊 Detailed Market Reports\n* 💹 Price and Trading Analytics\n* 🤖 AI-Powered Sentiment Analysis\n* 📱 Social Media Monitoring\n* 📄 PDF Report Generation\n* 📈 Prometheus Metrics\n",
     "version": "0.0.1"
   },
   "servers": [
@@ -17,7 +17,7 @@
           "search"
         ],
         "summary": "Search Coins",
-        "description": "Search for cryptocurrency tokens by name or symbol.\n\nParameters:\n- search: Search query string\n\nReturns:\n- List of matching coins with basic information",
+        "description": "Search for cryptocurrency tokens by name or symbol.\n\nParameters:\n- search: Search query string\n- verified: If True, only return verified tokens. If False, sort verified tokens to the beginning.\n\nReturns:\n- List of matching coins with basic information",
         "operationId": "search_coins_api_coin_get",
         "parameters": [
           {
@@ -27,6 +27,16 @@
             "schema": {
               "type": "string",
               "title": "Search"
+            }
+          },
+          {
+            "name": "verified",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Verified"
             }
           }
         ],
@@ -54,6 +64,22 @@
                       "address": {
                         "type": "string",
                         "title": "Address"
+                      },
+                      "price": {
+                        "type": "string",
+                        "title": "Price"
+                      },
+                      "market_cap": {
+                        "type": "number",
+                        "title": "Market Cap"
+                      },
+                      "created_at": {
+                        "type": "integer",
+                        "title": "Created At"
+                      },
+                      "verified": {
+                        "type": "boolean",
+                        "title": "Verified"
                       }
                     },
                     "type": "object",
@@ -61,7 +87,11 @@
                       "name",
                       "symbol",
                       "image",
-                      "address"
+                      "address",
+                      "price",
+                      "market_cap",
+                      "created_at",
+                      "verified"
                     ],
                     "title": "CoinInfo"
                   },
@@ -210,8 +240,99 @@
           "reports"
         ],
         "summary": "Generate Report Api",
-        "description": "Generate a comprehensive analysis report for a token.\n\nParameters:\n- address: Token contract address\n\nReturns:\n- Server-sent events stream with report generation progress",
+        "description": "Generate a comprehensive analysis report for a token.\n\nParameters:\n- address: Token contract address\n\nReturns:\n- Server-sent events stream with report generation progress\n\nSecurity:\n- Bearer token authentication required",
         "operationId": "generate_report_api_api_generate_report_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generate-article": {
+      "get": {
+        "tags": [
+          "articles"
+        ],
+        "summary": "Generate Article Api",
+        "description": "Generate a comprehensive analysis article for a token.\n\nParameters:\n- address: Token contract address\n\nReturns:\n- Server-sent events stream with article generation progress\n\nSecurity:\n- Bearer token authentication required",
+        "operationId": "generate_article_api_api_generate_article_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "address",
@@ -291,7 +412,7 @@
           "reports"
         ],
         "summary": "Generate Report Spaces",
-        "description": "Generate a report for Spaces integration with background processing.\n\nParameters:\n- address: Token contract address (Form field)\n- email: User's email address (Form field)\n\nReturns:\n- Confirmation of report generation initiation",
+        "description": "Generate a report for Spaces integration with background processing.\n\nParameters:\n- address: Token contract address (Form field)\n- email: User's email address (Form field)\n\nReturns:\n- Confirmation of report generation initiation\n\nRequires:\n- API token authentication via Bearer token in Authorization header",
         "operationId": "generate_report_spaces_api_generate_spaces_report_post",
         "requestBody": {
           "content": {
@@ -378,6 +499,11 @@
             }
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "x-openai-isConsequential": false
       }
     },
@@ -387,8 +513,13 @@
           "reports"
         ],
         "summary": "Search Report",
-        "description": "Search for generated reports with various filters.\n\nParameters:\n- coin: Token name or symbol to search for\n- page: Page number for pagination\n- limit: Number of results per page\n- timestamp_from: Start date for report search (ISO format)\n- timestamp_until: End date for report search (ISO format)\n\nReturns:\n- List of matching reports",
+        "description": "Search for generated reports with various filters.\n\nParameters:\n- coin: Token name or symbol to search for\n- page: Page number for pagination\n- limit: Number of results per page\n- timestamp_from: Start date for report search (ISO format)\n- timestamp_until: End date for report search (ISO format)\n\nReturns:\n- List of matching reports\n\nRequires:\n- API token authentication via Bearer token in Authorization header",
         "operationId": "search_report_api_report_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "coin",
@@ -449,30 +580,47 @@
                         "type": "string",
                         "title": "Id"
                       },
-                      "coin_name": {
+                      "name": {
                         "type": "string",
-                        "title": "Coin Name"
+                        "title": "Name"
                       },
                       "address": {
                         "type": "string",
                         "title": "Address"
                       },
-                      "created_at": {
+                      "timestamp": {
                         "type": "string",
-                        "title": "Created At"
+                        "title": "Timestamp"
                       },
                       "email": {
-                        "type": "string",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
                         "title": "Email"
+                      },
+                      "token_info": {
+                        "anyOf": [
+                          {
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "title": "Token Info"
                       }
                     },
                     "type": "object",
                     "required": [
                       "id",
-                      "coin_name",
+                      "name",
                       "address",
-                      "created_at",
-                      "email"
+                      "timestamp"
                     ],
                     "title": "SearchReportResponse"
                   },
@@ -540,7 +688,7 @@
           "reports"
         ],
         "summary": "Get Report",
-        "description": "Get a specific report in HTML format.\n\nParameters:\n- id: Unique report identifier\n\nReturns:\n- HTML formatted report",
+        "description": "Get a specific report in HTML format.\n\nParameters:\n- id: Unique report identifier\n\nReturns:\n- HTML formatted report\n\nRequires:\n- Authentication via API token or browser cookie if accessed from external sources",
         "operationId": "get_report_api_report__id__get",
         "parameters": [
           {
@@ -617,14 +765,670 @@
         }
       }
     },
+    "/r/{id}": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Report",
+        "description": "Get a specific report in HTML format.\n\nParameters:\n- id: Unique report identifier\n\nReturns:\n- HTML formatted report\n\nRequires:\n- Authentication via API token or browser cookie if accessed from external sources",
+        "operationId": "get_report_r__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/article/search": {
+      "get": {
+        "tags": [
+          "articles"
+        ],
+        "summary": "Search Article",
+        "description": "Search for generated reports with various filters.\n\nParameters:\n- approved: Approval status of the article\n- content: Content to search for in the article\n- address: Token contract address to search for\n- page: Page number for pagination\n- limit: Number of results per page\n- timestamp_from: Start date for article search (ISO format)\n- timestamp_until: End date for article search (ISO format)\n\nReturns:\n- List of matching articles\n\nRequires:\n- API token authentication via Bearer token in Authorization header",
+        "operationId": "search_article_api_article_search_get",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Address"
+            }
+          },
+          {
+            "name": "approved",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Approved"
+            }
+          },
+          {
+            "name": "content",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Content"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "timestamp_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timestamp From"
+            }
+          },
+          {
+            "name": "timestamp_until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timestamp Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/article/{id}": {
+      "get": {
+        "tags": [
+          "articles"
+        ],
+        "summary": "Get Article",
+        "description": "Get a specific article in HTML format.",
+        "operationId": "get_article_api_article__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/a/{id}": {
+      "get": {
+        "tags": [
+          "articles"
+        ],
+        "summary": "Get Article",
+        "description": "Get a specific article in HTML format.",
+        "operationId": "get_article_a__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/articles": {
+      "post": {
+        "tags": [
+          "articles"
+        ],
+        "summary": "Delete Articles",
+        "description": "Delete specific articles by their IDs.\n\nParameters:\n- ids: List of unique article identifiers\n\nReturns:\n- Confirmation of deletion\n\nRequires:\n- API token authentication via Bearer token in Authorization header",
+        "operationId": "delete_articles_api_articles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "ids": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array",
+                    "title": "Ids"
+                  },
+                  "tag": {
+                    "type": "string",
+                    "title": "Tag"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "ids",
+                  "tag"
+                ],
+                "title": "Body_delete_articles_api_articles_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/article_ids": {
+      "get": {
+        "tags": [
+          "articles"
+        ],
+        "summary": "Get Article Ids",
+        "description": "Get a list of all articles.\n\nReturns:\n- List of articles\n\nRequires:\n- API token authentication via Bearer token in Authorization header",
+        "operationId": "get_article_ids_api_article_ids_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/article/{id}/{approve}/{tag}": {
+      "get": {
+        "tags": [
+          "articles"
+        ],
+        "summary": "Approve Article",
+        "description": "Approve or disapprove an article by ID.\n\nParameters:\n- id: Unique article identifier\n- approve: Approval status (\"approve\" or \"disapprove\")\n- tag: Magic key for authentication\n\nReturns:\n- Confirmation of approval/disapproval\n\nRequires:\n- API token authentication via Bearer token in Authorization header",
+        "operationId": "approve_article_api_article__id___approve___tag__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "approve",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Approve"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/report/raw/{id}": {
       "get": {
         "tags": [
           "reports"
         ],
         "summary": "Get Raw Report",
-        "description": "Get the raw JSON data for a specific report.\n\nParameters:\n- id: Unique report identifier\n\nReturns:\n- Raw report data in JSON format",
+        "description": "Get the raw JSON data for a specific report.\n\nParameters:\n- id: Unique report identifier\n\nReturns:\n- Raw report data in JSON format\n\nRequires:\n- API token authentication via Bearer token in Authorization header",
         "operationId": "get_raw_report_api_report_raw__id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
@@ -704,8 +1508,13 @@
           "reports"
         ],
         "summary": "Get Yaml Report",
-        "description": "Get the YAML formatted data for a specific report.\n\nParameters:\n- id: Unique report identifier\n\nReturns:\n- Report data in YAML format as a string",
+        "description": "Get the YAML formatted data for a specific report.\n\nParameters:\n- id: Unique report identifier\n\nReturns:\n- Report data in YAML format as a string\n\nRequires:\n- API token authentication via Bearer token in Authorization header",
         "operationId": "get_yaml_report_api_report_yaml__id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
@@ -785,8 +1594,13 @@
           "reports"
         ],
         "summary": "Download Pdf",
-        "description": "Generate and download a PDF version of a report.\n\nParameters:\n- id: Unique report identifier\n\nReturns:\n- PDF file stream",
+        "description": "Generate and download a PDF version of a report.\n\nParameters:\n- id: Unique report identifier\n\nReturns:\n- PDF file stream\n\nRequires:\n- API token authentication via Bearer token in Authorization header",
         "operationId": "download_pdf_api_report_pdf__id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
@@ -978,8 +1792,13 @@
           "reports"
         ],
         "summary": "Get Spaces Report",
-        "description": "Get the spaces report for a specific client.\n\nParameters:\n- client_id: Unique client identifier\n\nReturns:\n- Markdown formatted report content",
+        "description": "Get the spaces report for a specific client.\n\nParameters:\n- client_id: Unique client identifier\n\nReturns:\n- Markdown formatted report content\n\nRequires:\n- Authentication via API token or browser cookie if accessed from external sources",
         "operationId": "get_spaces_report_api_get_spaces_report__client_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "client_id",
@@ -1133,10 +1952,2684 @@
           }
         }
       }
+    },
+    "/public/{file_path}": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "summary": "Serve Static",
+        "description": "Serve public files (internal use only).\n\nParameters:\n- file_path: Path to the public file\n\nReturns:\n- Public file response",
+        "operationId": "serve_static_public__file_path__get",
+        "parameters": [
+          {
+            "name": "file_path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/modular-report": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Modular Report",
+        "description": "Generate a modular report with only the requested components.\n\nParameters:\n- address: Token contract address\n- with_ath: Include all-time high data\n- with_top_holders: Include top token holders\n- with_common_coins: Include commonly co-owned coins\n- with_correlation: Include price correlation data\n- with_exchanges: Include exchange listings\n- with_sentiment: Include sentiment analysis\n- with_report_summary: Include LLM-generated report summary\n- with_ohlcv: Include OHLCV price data\n\nReturns:\n- JSON with requested report components\n\nSecurity:\n- Bearer token authentication required",
+        "operationId": "modular_report_api_modular_report_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Address"
+            }
+          },
+          {
+            "name": "with_ath",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Ath"
+            }
+          },
+          {
+            "name": "with_top_holders",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Top Holders"
+            }
+          },
+          {
+            "name": "with_common_coins",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Common Coins"
+            }
+          },
+          {
+            "name": "with_correlation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Correlation"
+            }
+          },
+          {
+            "name": "with_exchanges",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Exchanges"
+            }
+          },
+          {
+            "name": "with_sentiment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Sentiment"
+            }
+          },
+          {
+            "name": "with_report_summary",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Report Summary"
+            }
+          },
+          {
+            "name": "with_ohlcv",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Ohlcv"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/signup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Signup",
+        "operationId": "signup_api_auth_signup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "title": "Email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "title": "Password"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "title": "UserCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "title": "Message"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "title": "SignupResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/auth/verify/{token}": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Verify Email",
+        "operationId": "verify_email_api_auth_verify__token__get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "title": "Message"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "title": "VerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "grant_type": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "password"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Grant Type"
+                  },
+                  "username": {
+                    "type": "string",
+                    "title": "Username"
+                  },
+                  "password": {
+                    "type": "string",
+                    "title": "Password"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "title": "Scope",
+                    "default": ""
+                  },
+                  "client_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Client Id"
+                  },
+                  "client_secret": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Client Secret"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "title": "Body_login_api_auth_login_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "title": "Message"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "title": "VerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "description": "Log out the current user by clearing the authentication cookie.\n\nReturns:\n- Confirmation message",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/auth/set-role": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Set Role",
+        "description": "Set user role in the database.\n\nParameters:\n- email: User's email address\n- role: Role to set (e.g., \"admin\", \"user\")\n- tag: Magic key for authentication\n\nReturns:\n- Confirmation of role change\n\nRequires:\n- API token authentication via Bearer token in Authorization header",
+        "operationId": "set_role_api_auth_set_role_post",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Email"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Role"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/auth/resend-verification": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Resend Verification",
+        "operationId": "resend_verification_api_auth_resend_verification_post",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Email"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "title": "Message"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "title": "VerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Read Users Me",
+        "operationId": "read_users_me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Forgot Password",
+        "description": "Request a password reset link to be sent to user's email.\n\nParameters:\n- email: User's registered email address\n\nReturns:\n- Confirmation message that reset link has been sent (if user exists)",
+        "operationId": "forgot_password_api_auth_forgot_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "title": "Email"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "title": "ForgotPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "title": "Message"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "title": "VerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/auth/reset-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Reset Password Endpoint",
+        "description": "Reset user password with the provided token.\n\nParameters:\n- token: Password reset token\n- new_password: New password to set\n- confirm_password: Confirm new password\n\nReturns:\n- Confirmation message that password has been reset",
+        "operationId": "reset_password_endpoint_api_auth_reset_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "title": "Token"
+                  },
+                  "new_password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "title": "New Password"
+                  },
+                  "confirm_password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "title": "Confirm Password"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "token",
+                  "new_password",
+                  "confirm_password"
+                ],
+                "title": "ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "title": "Message"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "title": "VerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/auth/change-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Change Password Endpoint",
+        "description": "Change password for authenticated user.\n\nParameters:\n- current_password: Current password for validation\n- new_password: New password to set\n- confirm_password: Confirm new password\n\nReturns:\n- Confirmation message that password has been changed",
+        "operationId": "change_password_endpoint_api_auth_change_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "current_password": {
+                    "type": "string",
+                    "title": "Current Password"
+                  },
+                  "new_password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "title": "New Password"
+                  },
+                  "confirm_password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "title": "Confirm Password"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "current_password",
+                  "new_password",
+                  "confirm_password"
+                ],
+                "title": "ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "title": "Message"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "title": "VerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/auth/tokens": {
+      "get": {
+        "summary": "Get Tokens",
+        "operationId": "get_tokens_api_auth_tokens_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Generate Token",
+        "operationId": "generate_token_api_auth_tokens_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "title": "Id"
+                    },
+                    "token": {
+                      "type": "string",
+                      "title": "Token"
+                    },
+                    "abbreviated_token": {
+                      "type": "string",
+                      "title": "Abbreviated Token"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "token",
+                    "abbreviated_token"
+                  ],
+                  "title": "ApiTokenResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      },
+      "delete": {
+        "summary": "Delete Token",
+        "operationId": "delete_token_api_auth_tokens_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "token_id": {
+                    "type": "string",
+                    "title": "Token Id"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "token_id"
+                ],
+                "title": "DeleteTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": true
+      }
+    },
+    "/api/auth/tokens/usage": {
+      "get": {
+        "summary": "Get Token Usage",
+        "operationId": "get_token_usage_api_auth_tokens_usage_get",
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by specific token ID or leave empty to use the current token",
+              "title": "Token Id"
+            },
+            "description": "Filter by specific token ID or leave empty to use the current token"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Maximum number of records to return",
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Maximum number of records to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/coins": {
+      "get": {
+        "summary": "Coin Info",
+        "operationId": "coin_info_api_coins_get",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "balance": {
+                      "type": "string",
+                      "title": "Balance"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "balance"
+                  ],
+                  "title": "CoinInfoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/message": {
+      "post": {
+        "summary": "Evaluate Message Post",
+        "operationId": "evaluate_message_post_api_message_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "title": "Message"
+                  },
+                  "source": {
+                    "type": "string",
+                    "pattern": "^(X|Telegram)$",
+                    "title": "Source"
+                  },
+                  "info": {
+                    "anyOf": [
+                      {
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Info"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "message",
+                  "source"
+                ],
+                "title": "Body_evaluate_message_post_api_message_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "score": {
+                      "type": "integer",
+                      "title": "Score"
+                    },
+                    "tx_hash": {
+                      "type": "string",
+                      "title": "Tx Hash"
+                    },
+                    "explanation": {
+                      "type": "string",
+                      "title": "Explanation"
+                    },
+                    "balance": {
+                      "type": "string",
+                      "title": "Balance"
+                    },
+                    "info": {
+                      "type": "object",
+                      "title": "Info"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "score",
+                    "tx_hash",
+                    "explanation",
+                    "balance",
+                    "info"
+                  ],
+                  "title": "MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/message/address": {
+      "get": {
+        "summary": "Extract Address",
+        "operationId": "extract_address_api_message_address_get",
+        "parameters": [
+          {
+            "name": "message",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Message"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "address": {
+                      "type": "string",
+                      "title": "Address"
+                    },
+                    "ticker": {
+                      "type": "string",
+                      "title": "Ticker"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "address",
+                    "ticker"
+                  ],
+                  "title": "AddressExtractResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rumours": {
+      "get": {
+        "summary": "Get Rumours",
+        "description": "Get rumor messages with filtering and pagination.\n\nParameters:\n- page: Page number (starts from 1)\n- limit: Number of items per page (max 100)\n- token_address: Filter by token address\n- start_date: Filter messages from this date (ISO format)\n- end_date: Filter messages until this date (ISO format)\n- format: Response format, either 'json' or 'markdown' (default: json)",
+        "operationId": "get_rumours_api_rumours_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 100,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "token_address",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token Address"
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Response format (json or markdown)",
+              "default": "json",
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ],
+              "title": "FormatType"
+            },
+            "description": "Response format (json or markdown)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feed/{channel}": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Feed",
+        "description": "Get an RSS feed for different content channels.\n\nParameters:\n- channel: The feed channel to retrieve (reports, articles)\n\nReturns:\n- RSS feed in XML format containing the channel content",
+        "operationId": "get_feed_api_feed__channel__get",
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Channel"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/document": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Add Document Endpoint",
+        "description": "Add a document to the database.\n\nParameters:\n- text: Document text to be added\n\nReturns:\n- Confirmation message",
+        "operationId": "add_document_endpoint_api_document_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "title": "Text"
+                  },
+                  "tag": {
+                    "type": "string",
+                    "title": "Tag"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "text",
+                  "tag"
+                ],
+                "title": "Body_add_document_endpoint_api_document_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/documents": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Get Documents Endpoint",
+        "description": "Get all documents from the database.\n\nReturns:\n- List of documents",
+        "operationId": "get_documents_endpoint_api_documents_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/document/{id}": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Get Document By Id Endpoint",
+        "description": "Get a document by its ID.\n\nParameters:\n- id: Document ID\n\nReturns:\n- Document details",
+        "operationId": "get_document_by_id_endpoint_api_document__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/document/{id}/{approve}/{tag}": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Approve Document Endpoint",
+        "description": "Approve or disapprove a document by its ID.\n\nParameters:\n- id: Document ID\n- approve: Boolean indicating whether to approve or disapprove\n- tag: Magic key for authentication\n\nReturns:\n- Confirmation message",
+        "operationId": "approve_document_endpoint_api_document__id___approve___tag__post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "approve",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "boolean",
+              "title": "Approve"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/document/{id}/{tag}": {
+      "delete": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Delete Document Endpoint",
+        "description": "Delete a document by its ID.\n\nParameters:\n- id: Document ID\n- tag: Magic key for authentication\n\nReturns:\n- Confirmation message",
+        "operationId": "delete_document_endpoint_api_document__id___tag__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": true
+      }
+    },
+    "/api/report/{id}/share/{platform}": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Increment Share",
+        "description": "Increment the share count for a specific report and platform.\nPlatform must be one of: twitter, telegram, discord, copy",
+        "operationId": "increment_share_api_report__id__share__platform__post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Platform"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "platform": {
+                      "type": "string",
+                      "title": "Platform"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "title": "Count"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "platform",
+                    "count"
+                  ],
+                  "title": "ShareCountResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/report/{id}/shares": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Shares",
+        "description": "Get all share counts for a specific report",
+        "operationId": "get_shares_api_report__id__shares_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "counts": {
+                      "additionalProperties": {
+                        "type": "integer"
+                      },
+                      "type": "object",
+                      "title": "Counts"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "counts"
+                  ],
+                  "title": "ShareCountsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "items": {
+                        "properties": {
+                          "loc": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "type": "array",
+                            "title": "Location"
+                          },
+                          "msg": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "type": {
+                            "type": "string",
+                            "title": "Error Type"
+                          }
+                        },
+                        "type": "object",
+                        "required": [
+                          "loc",
+                          "msg",
+                          "type"
+                        ],
+                        "title": "ValidationError"
+                      },
+                      "type": "array",
+                      "title": "Detail"
+                    }
+                  },
+                  "type": "object",
+                  "title": "HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AddressExtractResponse": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "ticker": {
+            "type": "string",
+            "title": "Ticker"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "ticker"
+        ],
+        "title": "AddressExtractResponse"
+      },
+      "ApiTokenResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "abbreviated_token": {
+            "type": "string",
+            "title": "Abbreviated Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "token",
+          "abbreviated_token"
+        ],
+        "title": "ApiTokenResponse"
+      },
+      "Body_add_document_endpoint_api_document_post": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "tag": {
+            "type": "string",
+            "title": "Tag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "tag"
+        ],
+        "title": "Body_add_document_endpoint_api_document_post"
+      },
+      "Body_delete_articles_api_articles_post": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ids"
+          },
+          "tag": {
+            "type": "string",
+            "title": "Tag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ids",
+          "tag"
+        ],
+        "title": "Body_delete_articles_api_articles_post"
+      },
+      "Body_evaluate_message_post_api_message_post": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(X|Telegram)$",
+            "title": "Source"
+          },
+          "info": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Info"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "source"
+        ],
+        "title": "Body_evaluate_message_post_api_message_post"
+      },
       "Body_generate_report_spaces_api_generate_spaces_report_post": {
         "properties": {
           "address": {
@@ -1155,6 +4648,88 @@
         ],
         "title": "Body_generate_report_spaces_api_generate_spaces_report_post"
       },
+      "Body_login_api_auth_login_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "password"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_login_api_auth_login_post"
+      },
+      "ChangePasswordRequest": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "New Password"
+          },
+          "confirm_password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "Confirm Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password",
+          "confirm_password"
+        ],
+        "title": "ChangePasswordRequest"
+      },
       "CoinInfo": {
         "properties": {
           "name": {
@@ -1172,6 +4747,22 @@
           "address": {
             "type": "string",
             "title": "Address"
+          },
+          "price": {
+            "type": "string",
+            "title": "Price"
+          },
+          "market_cap": {
+            "type": "number",
+            "title": "Market Cap"
+          },
+          "created_at": {
+            "type": "integer",
+            "title": "Created At"
+          },
+          "verified": {
+            "type": "boolean",
+            "title": "Verified"
           }
         },
         "type": "object",
@@ -1179,9 +4770,61 @@
           "name",
           "symbol",
           "image",
-          "address"
+          "address",
+          "price",
+          "market_cap",
+          "created_at",
+          "verified"
         ],
         "title": "CoinInfo"
+      },
+      "CoinInfoResponse": {
+        "properties": {
+          "balance": {
+            "type": "string",
+            "title": "Balance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "balance"
+        ],
+        "title": "CoinInfoResponse"
+      },
+      "DeleteTokenRequest": {
+        "properties": {
+          "token_id": {
+            "type": "string",
+            "title": "Token Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token_id"
+        ],
+        "title": "DeleteTokenRequest"
+      },
+      "ForgotPasswordRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "ForgotPasswordRequest"
+      },
+      "FormatType": {
+        "type": "string",
+        "enum": [
+          "json",
+          "markdown"
+        ],
+        "title": "FormatType"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1226,38 +4869,180 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "MessageResponse": {
+        "properties": {
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          },
+          "tx_hash": {
+            "type": "string",
+            "title": "Tx Hash"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "balance": {
+            "type": "string",
+            "title": "Balance"
+          },
+          "info": {
+            "type": "object",
+            "title": "Info"
+          }
+        },
+        "type": "object",
+        "required": [
+          "score",
+          "tx_hash",
+          "explanation",
+          "balance",
+          "info"
+        ],
+        "title": "MessageResponse"
+      },
+      "ResetPasswordRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "New Password"
+          },
+          "confirm_password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "Confirm Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "new_password",
+          "confirm_password"
+        ],
+        "title": "ResetPasswordRequest"
+      },
       "SearchReportResponse": {
         "properties": {
           "id": {
             "type": "string",
             "title": "Id"
           },
-          "coin_name": {
+          "name": {
             "type": "string",
-            "title": "Coin Name"
+            "title": "Name"
           },
           "address": {
             "type": "string",
             "title": "Address"
           },
-          "created_at": {
+          "timestamp": {
             "type": "string",
-            "title": "Created At"
+            "title": "Timestamp"
           },
           "email": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Email"
+          },
+          "token_info": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Info"
           }
         },
         "type": "object",
         "required": [
           "id",
-          "coin_name",
+          "name",
           "address",
-          "created_at",
-          "email"
+          "timestamp"
         ],
         "title": "SearchReportResponse"
+      },
+      "ShareCountResponse": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "title": "Platform"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "platform",
+          "count"
+        ],
+        "title": "ShareCountResponse"
+      },
+      "ShareCountsResponse": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "counts"
+        ],
+        "title": "ShareCountsResponse"
+      },
+      "SignupResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "SignupResponse"
+      },
+      "UserCreate": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "UserCreate"
       },
       "ValidationError": {
         "properties": {
@@ -1292,6 +5077,19 @@
         ],
         "title": "ValidationError"
       },
+      "VerificationResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "VerificationResponse"
+      },
       "WaitlistRequest": {
         "properties": {
           "email": {
@@ -1306,7 +5104,12 @@
         "title": "WaitlistRequest"
       }
     },
-    "securitySchemes": {}
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
   },
   "tags": [
     {
@@ -1324,6 +5127,14 @@
     {
       "name": "waitlist",
       "description": "Waitlist management operations"
+    },
+    {
+      "name": "auth",
+      "description": "Authentication operations"
+    },
+    {
+      "name": "monitoring",
+      "description": "Monitoring and metrics endpoints for Prometheus"
     }
   ]
 }

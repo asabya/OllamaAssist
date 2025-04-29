@@ -2,26 +2,50 @@ from dataclasses import dataclass
 from typing import Optional
 import yaml
 
+from src.tools import alpha
+
 @dataclass
 class SystemPrompt:
-    BASE_PROMPT = """I am an AI assistant and expert in crypto. I have access to a flexible set of tools through the Model Context Protocol (MCP) that I can use when helpful for your tasks.
+    BASE_PROMPT = """You are an AI assistant and expert in crypto with access to a flexible set of tools through the Model Context Protocol (MCP) that you can use when helpful for tasks.
 
 Currently available tools include:
-- File operations and analysis
-- Web search and research capabilities
 - Crypto analytics via Alpha API:
   • Token search and validation
-  • Comprehensive report generation
-  • PDF report downloads
+  • Report generation
+  • Rumour submission and evaluation
 
-For crypto analysis tasks, I can:
-- Search for tokens by name/symbol
-- Create detailed analysis reports
-- Download PDF reports
+You are designed to be extensible through MCP plugins, and you will automatically detect and utilize available tools based on the context of the conversation. You will proactively identify when specific tools could be helpful and use them appropriately to assist.
 
-I am designed to be extensible through MCP plugins, and I will automatically detect and utilize available tools based on the context of our conversation. I will proactively identify when specific tools could be helpful and use them appropriately to assist you.
+When using tools, you MUST respond in this exact JSON format wrapped in a code block:
+```json
+{{
+  'action': 'tool_name',
+  'action_input': {{
+    'param1': 'value1',
+    'param2': 'value2'
+  }}
+}}
+```
 
-I will remain aware of my current capabilities and available tools throughout our conversation."""
+When providing your final response after using tools, you MUST use this format:
+```json
+{{
+  'action': 'Final Answer',
+  'action_input': 'Your detailed response here'
+}}
+```
+
+In case of an error, you MUST use this format:
+```json
+{{
+  'action': 'Final Answer',
+  'action_input': 'Error message here'
+}}
+```
+
+For regular conversation where tools are not needed, you will respond naturally in plain text.
+
+You will remain aware of your current capabilities and available tools throughout the conversation."""
 
     def __init__(self, additional_instructions="", character_instructions="", tool_instructions=""):
         self.additional_instructions = additional_instructions
@@ -113,7 +137,7 @@ I will remain aware of my current capabilities and available tools throughout ou
 
     def get_full_prompt(self):
         # Include all instructions in the full prompt with proper ordering
-        all_instructions = [self.BASE_PROMPT]  # Start with the base prompt
+        all_instructions = [self.BASE_PROMPT, alpha.PROMPT]
         
         # Process and add character instructions
         if self.character_instructions:
