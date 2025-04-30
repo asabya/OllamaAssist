@@ -20,6 +20,7 @@ from langchain_core.agents import AgentAction, AgentFinish
 from langchain.schema import SystemMessage
 
 from cli_chat import load_tools, setup_agent
+from src.database import Conversation, get_db
 from src.tools.registry import ToolRegistry
 from src.prompts.system_prompt import SystemPrompt
 from src.llm_factory import LLMFactory
@@ -77,6 +78,9 @@ def format_log_to_messages(intermediate_steps):
 # In production, you'd want to use a proper database
 conversation_agents: Dict[str, AgentExecutor] = {}
 
+# Configuration
+CONTEXT_WINDOW_SIZE = 10  # Number of messages to keep in context
+
 tools = load_tools()
 memory_manager = MemoryManager()
 
@@ -122,12 +126,30 @@ async def chat_endpoint(request: ChatRequest):
         agent_executor = None
         conversation_id = request.conversation_id
         
-        if conversation_id and conversation_id in conversation_agents:
-            agent_executor = conversation_agents[conversation_id]
+        if conversation_id:
+            # Check if agent exists in memory
+            agent_executor = conversation_agents.get(conversation_id)
+            
+            if not agent_executor:
+                # Check if conversation exists in database
+                with get_db() as db:
+                    conversation = db.query(Conversation).filter(
+                        Conversation.id == conversation_id
+                    ).first()
+                    
+                    if conversation:
+                        # Restore agent from database with context window
+                        agent_executor = setup_agent(tools, memory_manager, conversation_id, context_window=CONTEXT_WINDOW_SIZE)
+                        conversation_agents[conversation_id] = agent_executor
+                    else:
+                        # Create new conversation if it doesn't exist
+                        conversation_id = str(uuid.uuid4())
+                        agent_executor = setup_agent(tools, memory_manager, conversation_id, context_window=CONTEXT_WINDOW_SIZE)
+                        conversation_agents[conversation_id] = agent_executor
         else:
             # Create new conversation with UUID
             conversation_id = str(uuid.uuid4())
-            agent_executor = setup_agent(tools, memory_manager, conversation_id)
+            agent_executor = setup_agent(tools, memory_manager, conversation_id, context_window=CONTEXT_WINDOW_SIZE)
             conversation_agents[conversation_id] = agent_executor
         
         # Add user message to memory

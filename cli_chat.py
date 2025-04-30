@@ -123,9 +123,16 @@ def load_config():
         logging.error(f"Error loading config: {e}")
         return {"llm": {"provider": "anthropic", "settings": {}}}
 
-def setup_agent(tools: List[StructuredTool], memory_manager: MemoryManager, conversation_id: str):
+def setup_agent(tools: List[StructuredTool], memory_manager: MemoryManager, conversation_id: str, context_window: int = 10):
     print("Setting up agent")
-    """Set up the LangChain agent with configured LLM"""
+    """Set up the LangChain agent with configured LLM
+    
+    Args:
+        tools: List of available tools
+        memory_manager: Memory manager instance
+        conversation_id: ID of the conversation
+        context_window: Number of most recent messages to include in context (default: 10)
+    """
     # Load configuration
     config = load_config()
     llm_config = config.get("llm", {"provider": "anthropic", "settings": {}})
@@ -185,12 +192,12 @@ def setup_agent(tools: List[StructuredTool], memory_manager: MemoryManager, conv
     ])
     print("Prompt template created")
     
-    # Create the agent
+    # Create the agent with windowed chat history
     agent = (
         {
             "input": lambda x: x["input"],
             "agent_scratchpad": lambda x: format_log_to_messages(x["intermediate_steps"]),
-            "chat_history": lambda x: memory_manager.get_conversation_history(conversation_id),
+            "chat_history": lambda x: memory_manager.get_conversation_history(conversation_id, limit=context_window),
         }
         | prompt
         | llm
