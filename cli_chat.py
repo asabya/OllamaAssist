@@ -18,7 +18,6 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 import re
 
 from src.handlers import UsageTrackingHandler
-from src.mcp_client import mcp
 from src.prompts.system_prompt import SystemPrompt
 from src.llm_factory import LLMFactory
 from src.memory_manager import MemoryManager
