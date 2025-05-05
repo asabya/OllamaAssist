@@ -10,16 +10,16 @@ from ..mcp_client import mcp
 TEST_CONFIG = {
     "mcpServers": {
         "test_server": {
-            "enabled": True,
+            "type": "stdio",
             "command": "npx",
             "args": ["@microsoft/mcp-server"],
             "env": {
                 "TEST_ENV": "value"
             }
         },
-        "alpha": {
-            "command": "/opt/homebrew/bin/mcp-proxy",
-            "args": ["http://127.0.0.1:8000/mcp"]
+        "alpha-api-sse": {
+            "type": "sse",
+            "url": "http://127.0.0.1:8000/mcp"
         },
         "disabled_server": {
             "enabled": False,
@@ -46,7 +46,7 @@ async def test_list_available_servers(mock_config_file):
         
         assert isinstance(servers, list)
         assert "test_server" in servers
-        assert "alpha" in servers
+        assert "alpha-api-sse" in servers
         assert "disabled_server" not in servers
 
 @pytest.mark.asyncio

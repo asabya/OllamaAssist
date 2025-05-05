@@ -7,6 +7,7 @@ import platform
 from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.sse import sse_client
 import logging
 import asyncio
 from typing import Any, Optional, Dict
@@ -78,46 +79,82 @@ async def mcp(server: str = None, tool: str = None, arguments: dict = None) -> A
 
         # Build server connection
         config = servers[server]
-        command = npx_path if config['command'] == 'npx' else config['command']
+        server_type = config.get('type', 'stdio')  # Default to stdio for backward compatibility
         env = os.environ.copy()
         env.update(config.get('env', {}))
 
         arguments = arguments or {}
-
         # Connect to server and execute tool
         try:
-            async with stdio_client(StdioServerParameters(
-                command=command,
-                args=config.get('args', []),
-                env=env
-            )) as (read, write):
-                async with ClientSession(read, write) as session:
-                    try:
-                        await session.initialize()
+            if server_type == 'stdio':
+                command = npx_path if config['command'] == 'npx' else config['command']
+                server_params = StdioServerParameters(
+                    command=command,
+                    args=config.get('args', []),
+                    env=env
+                )
+                async with stdio_client(server_params) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        try:
+                            await session.initialize()
 
-                        # Handle tool_details
-                        if tool == 'tool_details':
-                            result = await session.list_tools()
-                            return json.dumps([{
-                                'name': t.name,
-                                'description': t.description,
-                                'input_schema': t.inputSchema
-                            } for t in result.tools], indent=2)
+                            # Handle tool_details
+                            if tool == 'tool_details':
+                                result = await session.list_tools()
+                                print(result)
+                                return json.dumps([{
+                                    'name': t.name,
+                                    'description': t.description,
+                                    'input_schema': t.inputSchema
+                                } for t in result.tools], indent=2)
 
-                        # Execute requested tool
-                        if not tool:
-                            raise ValueError("Tool name required")
+                            # Execute requested tool
+                            if not tool:
+                                raise ValueError("Tool name required")
 
-                        return await session.call_tool(tool, arguments=arguments)
+                            return await session.call_tool(tool, arguments=arguments)
 
-                    except asyncio.CancelledError:
-                        logger.error(f"Operation cancelled for tool {tool}")
-                        raise
-                    except Exception as e:
-                        logger.error(f"Error executing tool {tool}: {str(e)}", exc_info=True)
-                        if isinstance(e, asyncio.exceptions.TimeoutError):
-                            return {"error": "Operation timed out"}
-                        return {"error": str(e)}
+                        except asyncio.CancelledError:
+                            logger.error(f"Operation cancelled for tool {tool}")
+                            raise
+                        except Exception as e:
+                            logger.error(f"Error executing tool {tool}: {str(e)}", exc_info=True)
+                            if isinstance(e, asyncio.exceptions.TimeoutError):
+                                return {"error": "Operation timed out"}
+                            return {"error": str(e)}
+            elif server_type == 'sse':
+                async with sse_client(url=config['url']) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        try:
+                            await session.initialize()
+
+                            # Handle tool_details
+                            if tool == 'tool_details':
+                                result = await session.list_tools()
+                                return json.dumps([{
+                                    'name': t.name,
+                                    'description': t.description,
+                                    'input_schema': t.inputSchema
+                                } for t in result.tools], indent=2)
+
+                            # Execute requested tool
+                            if not tool:
+                                raise ValueError("Tool name required")
+
+                            return await session.call_tool(tool, arguments=arguments)
+
+                        except asyncio.CancelledError:
+                            logger.error(f"Operation cancelled for tool {tool}")
+                            raise
+                        except Exception as e:
+                            logger.error(f"Error executing tool {tool}: {str(e)}", exc_info=True)
+                            if isinstance(e, asyncio.exceptions.TimeoutError):
+                                return {"error": "Operation timed out"}
+                            return {"error": str(e)}
+            else:
+                raise ValueError(f"Unsupported server type: {server_type}")
+
+            
 
         except asyncio.exceptions.CancelledError:
             logger.error("MCP client operation cancelled")

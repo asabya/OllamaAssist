@@ -7,19 +7,21 @@ from datetime import datetime
 from typing import List
 import uuid
 
-from langchain.agents import AgentExecutor
+from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools import StructuredTool
 from langchain.prompts import MessagesPlaceholder, ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate
 from langchain.agents.agent import AgentOutputParser
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import SystemMessage
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
 import re
 
-from src.tools.registry import ToolRegistry
+from src.mcp_client import mcp
 from src.prompts.system_prompt import SystemPrompt
 from src.llm_factory import LLMFactory
 from src.memory_manager import MemoryManager
+from src.llm_helper import MCPToolWrapper
 
 # Configure logging
 log_dir = "logs"
@@ -38,33 +40,31 @@ class CustomJSONAgentOutputParser(AgentOutputParser):
     def parse(self, text: str) -> AgentAction | AgentFinish:
         # Clean the text
         clean_text = text.strip()
-        
         # First try to extract JSON from the response
         json_match = re.search(r'```json\s*(.*?)\s*```', clean_text, re.DOTALL)
         if json_match:
             try:
                 # Get the JSON content and clean it
                 json_str = json_match.group(1).strip()
-                
                 # Remove any invalid control characters
                 json_str = "".join(char for char in json_str if char.isprintable())
                 # Normalize newlines
                 json_str = json_str.replace('\r\n', '\n').replace('\r', '\n')
                 
                 response = json.loads(json_str)
-                print(f"\n\nResponse: {response}")
                 action = response.get("action", "").strip()
                 action_input = response.get("action_input", {})
                 
                 if action == "Final Answer":
+                    print("Action finish 1")
                     return AgentFinish(
-                        return_values={"output": action_input if isinstance(action_input, str) else str(action_input)},
+                        return_values={"output": action_input.strip() if isinstance(action_input, str) else str(action_input).strip()},
                         log=text,
                     )
                 
                 return AgentAction(
                     tool=action,
-                    tool_input=action_input if isinstance(action_input, dict) else {"input": action_input},
+                    tool_input=action_input if isinstance(action_input, dict) else {"input": str(action_input).strip()},
                     log=text,
                 )
             except json.JSONDecodeError as e:
@@ -73,26 +73,19 @@ class CustomJSONAgentOutputParser(AgentOutputParser):
 
         # else check if clean_text is a valid JSON
         try:
-            print(f"\n\nClean text: {clean_text}")
-            print(f"\n\nClean text type: {type(clean_text)}")
             finish = json.loads(clean_text)
             return AgentFinish(
-                return_values={"output": finish},
+                return_values={"output": str(finish).strip()},
                 log=text,
             )
         except json.JSONDecodeError as e:
             print(f"\n\nJSON decode error: {e}")
             pass  # Fall through to natural language handling
-        else:
-            return AgentFinish(
-                return_values={"output": clean_text},
-                log=text,
-            )
-
+        
         # If no valid JSON found, treat as a natural conversation response
         if not any(tool_indicator in clean_text.lower() for tool_indicator in ["action", "tool", "function"]):
             return AgentFinish(
-                return_values={"output": clean_text},
+                return_values={"output": clean_text.strip()},
                 log=text,
             )
             
@@ -106,13 +99,9 @@ def format_log_to_messages(intermediate_steps):
         # Combine the tool call and its response into a single assistant message
         messages.append({
             "role": "assistant",
-            "content": f"I will use the {action.tool} tool with input: {json.dumps(action.tool_input)}\n\nTool response: {str(observation)}"
+            "content": f"I will use the {action.tool} tool with input: {json.dumps(action.tool_input)}\n\nTool response: {str(observation)}".rstrip()
         })
     return messages
-
-def load_tools() -> List[StructuredTool]:
-    """Load all registered tools"""
-    return list(ToolRegistry.get_all_tools().values())
 
 def load_config():
     """Load configuration from mcp_config.json"""
@@ -123,56 +112,48 @@ def load_config():
         logging.error(f"Error loading config: {e}")
         return {"llm": {"provider": "anthropic", "settings": {}}}
 
-def setup_agent(tools: List[StructuredTool], memory_manager: MemoryManager, conversation_id: str, context_window: int = 10):
+async def setup_agent(memory_manager: MemoryManager, conversation_id: str, context_window: int = 10):
     print("Setting up agent")
     """Set up the LangChain agent with configured LLM
     
     Args:
-        tools: List of available tools
         memory_manager: Memory manager instance
         conversation_id: ID of the conversation
         context_window: Number of most recent messages to include in context (default: 10)
+        
+    Returns:
+        Tuple of (agent_executor, mcp_client)
     """
     # Load configuration
     config = load_config()
     llm_config = config.get("llm", {"provider": "anthropic", "settings": {}})
     
     # Initialize the LLM using the factory
-    try:
-        llm = LLMFactory.create_llm(llm_config)
-        print(f"LLM initialized: {llm_config['provider']}")
-    except Exception as e:
-        logging.error(f"Error initializing LLM: {e}")
-        raise
+    llm = LLMFactory.create_llm(llm_config)
+    print(f"LLM initialized: {llm_config['provider']}")
     
-    # Build tool-specific instructions
-    tool_instructions = "Available Tools:\n\n"
-    for tool in tools:
-        tool_instructions += f"- {tool.name}: {tool.description}\n"
-        # Get tool-specific prompt if available
-        if hasattr(tool, 'PROMPT'):
-            tool_instructions += f"\nTool-specific instructions:\n{tool.PROMPT}\n"
-        # Add parameters info
-        if tool.args_schema:
-            tool_instructions += "Parameters:\n"
-            schema = tool.args_schema.model_json_schema()
-            for param_name, param_info in schema.get("properties", {}).items():
-                param_type = param_info.get("type", "unknown")
-                param_desc = param_info.get("description", "")
-                tool_instructions += f"  - {param_name} ({param_type})"
-                if param_desc:
-                    tool_instructions += f": {param_desc}"
-                tool_instructions += "\n"
-        tool_instructions += "\n"
+    # Initialize MCP clients using MultiServerMCPClient
+    mcp_servers = config.get("mcpServers", {})
+    print(f"MCP servers: {mcp_servers}")
+    client = None
+    if mcp_servers:
+        client = MultiServerMCPClient(mcp_servers)
+        await client.__aenter__()
+    else:
+        print("No MCP servers found in config")
+        raise ValueError("No MCP servers configured")
     
     # Create system prompt using SystemPrompt class
-    system_prompt = SystemPrompt(
-        tool_instructions=tool_instructions
-    )
+    system_prompt = SystemPrompt()
+
+    # Get tools
+    tools = client.get_tools()
+    tool_names = ", ".join([tool.name for tool in tools])
+    tools_description = "\n".join([f"{tool.name}: {tool.description}" for tool in tools])
 
     content = [
         {
-            "text": system_prompt.get_full_prompt(),
+            "text": f"{system_prompt.get_full_prompt()}\n\nTools available:\n{tools_description}\n\nTool names: {tool_names}",
             "type": "text"
         }
     ]
@@ -181,7 +162,7 @@ def setup_agent(tools: List[StructuredTool], memory_manager: MemoryManager, conv
     if provider == "anthropic":
         content[0]["cache_control"] = {"type": "ephemeral"}
     
-    # Create the prompt template
+    # Create the prompt template with required variables
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(
             content=content
@@ -189,7 +170,10 @@ def setup_agent(tools: List[StructuredTool], memory_manager: MemoryManager, conv
         MessagesPlaceholder(variable_name="chat_history"),
         HumanMessagePromptTemplate.from_template("{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ])
+    ]).partial(
+        tools=tools_description,
+        tool_names=tool_names
+    )
     print("Prompt template created")
     
     # Create the agent with windowed chat history
@@ -213,7 +197,7 @@ def setup_agent(tools: List[StructuredTool], memory_manager: MemoryManager, conv
         max_iterations=5
     )
     
-    return agent_executor
+    return agent_executor, client
 
 def print_welcome():
     """Print welcome message and available commands"""
@@ -243,10 +227,9 @@ def print_tools(tools: List[StructuredTool]):
 async def chat_loop():
     print("Starting chat loop")
     """Main chat loop using LangChain agent"""
-    tools = load_tools()
     memory_manager = MemoryManager()
     conversation_id = str(uuid.uuid4())
-    agent_executor = setup_agent(tools, memory_manager, conversation_id)
+    agent_executor, client = await setup_agent(memory_manager, conversation_id)
     
     # Create save directory if it doesn't exist
     save_dir = "conversations"
@@ -254,59 +237,69 @@ async def chat_loop():
     
     print_welcome()
     
-    while True:
-        try:
-            # Get user input
-            user_input = input("\n👤 You: ").strip()
-            
-            # Handle special commands
-            if user_input.lower() in ['quit', 'exit']:
-                print("👋 Goodbye!")
+    try:
+        while True:
+            try:
+                # Get user input
+                user_input = input("\n👤 You: ").strip()
+                
+                # Handle special commands
+                if user_input.lower() in ['quit', 'exit']:
+                    print("👋 Goodbye!")
+                    break
+                elif user_input.lower() == 'tools':
+                    print("Tools information is not available in this mode")
+                    continue
+                elif user_input.lower() == 'clear':
+                    memory_manager.clear_conversation(conversation_id)
+                    print("🧹 Chat history cleared")
+                    continue
+                elif user_input.lower() == 'save':
+                    save_path = os.path.join(save_dir, f"conversation_{conversation_id}.json")
+                    memory_manager.save_state(save_path)
+                    print(f"💾 Conversation saved to {save_path}")
+                    continue
+                elif user_input.lower() == 'load':
+                    load_path = input("Enter the path to the conversation file: ").strip()
+                    if os.path.exists(load_path):
+                        memory_manager.load_state(load_path)
+                        print("📂 Conversation loaded")
+                    else:
+                        print("❌ File not found")
+                    continue
+                elif not user_input:
+                    continue
+                
+                # Add user message to memory
+                await memory_manager.add_user_message(conversation_id, user_input)
+                
+                # Process user input through the agent
+                print("\n⏳ Thinking...")
+                print("\nMessages being sent to LLM:")
+                messages = await memory_manager.get_conversation_history(conversation_id)
+                for msg in messages:
+                    print(f"Role: {msg.type}, Content: {msg.content}")
+                
+                response = await agent_executor.ainvoke({"input": user_input})
+                
+                # Add AI response to memory
+                await memory_manager.add_ai_message(conversation_id, response["output"])
+                
+                # Print the response
+                print("\n🤖 Assistant:", response["output"])
+                
+            except KeyboardInterrupt:
+                print("\n👋 Chat interrupted. Goodbye!")
                 break
-            elif user_input.lower() == 'tools':
-                print_tools(tools)
-                continue
-            elif user_input.lower() == 'clear':
-                memory_manager.clear_conversation(conversation_id)
-                print("🧹 Chat history cleared")
-                continue
-            elif user_input.lower() == 'save':
-                save_path = os.path.join(save_dir, f"conversation_{conversation_id}.json")
-                memory_manager.save_state(save_path)
-                print(f"💾 Conversation saved to {save_path}")
-                continue
-            elif user_input.lower() == 'load':
-                load_path = input("Enter the path to the conversation file: ").strip()
-                if os.path.exists(load_path):
-                    memory_manager.load_state(load_path)
-                    print("📂 Conversation loaded")
-                else:
-                    print("❌ File not found")
-                continue
-            elif not user_input:
-                continue
-            
-            # Add user message to memory
-            await memory_manager.add_user_message(conversation_id, user_input)
-            
-            # Process user input through the agent
-            print("\n⏳ Thinking...")
-            response = await agent_executor.ainvoke({"input": user_input})
-            
-            # Add AI response to memory
-            await memory_manager.add_ai_message(conversation_id, response["output"])
-            
-            # Print the response
-            print("\n🤖 Assistant:", response["output"])
-            
-        except KeyboardInterrupt:
-            print("\n👋 Chat interrupted. Goodbye!")
-            break
-        except Exception as e:
-            import traceback
-            error_msg = f"\n❌ Error: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            logging.error("Error in chat loop", exc_info=True)
+            except Exception as e:
+                import traceback
+                error_msg = f"\n❌ Error: {str(e)}\n{traceback.format_exc()}"
+                print(error_msg)
+                logging.error("Error in chat loop", exc_info=True)
+    finally:
+        # Properly close the MCP client when we're done
+        if client:
+            await client.__aexit__(None, None, None)
 
 def main():
     """Main entry point"""

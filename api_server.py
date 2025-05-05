@@ -19,9 +19,8 @@ from langchain.agents.agent import AgentOutputParser
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain.schema import SystemMessage
 
-from cli_chat import load_tools, setup_agent
+from cli_chat import setup_agent, format_log_to_messages
 from src.database import Conversation, get_db
-from src.tools.registry import ToolRegistry
 from src.prompts.system_prompt import SystemPrompt
 from src.llm_factory import LLMFactory
 from src.memory_manager import MemoryManager
@@ -60,28 +59,14 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     output: str
     conversation_id: str
-
-def format_log_to_messages(intermediate_steps):
-    """Format intermediate steps into chat messages"""
-    messages = []
     
-    for action, observation in intermediate_steps:
-        # Combine the tool call and its response into a single assistant message
-        messages.append({
-            "role": "assistant",
-            "content": f"I will use the {action.tool} tool with input: {json.dumps(action.tool_input)}\n\nTool response: {str(observation)}"
-        })
-    
-    return messages
-
 # Store conversation agents in memory
 # In production, you'd want to use a proper database
-conversation_agents: Dict[str, AgentExecutor] = {}
+conversation_agents: Dict[str, tuple[AgentExecutor, Any]] = {}
 
 # Configuration
 CONTEXT_WINDOW_SIZE = 10  # Number of messages to keep in context
 
-tools = load_tools()
 memory_manager = MemoryManager()
 
 @app.get("/")
@@ -123,44 +108,26 @@ async def chat_endpoint(request: ChatRequest):
     """
     try:
         # Get or create conversation agent
-        agent_executor = None
-        conversation_id = request.conversation_id
+        conversation_id = request.conversation_id or str(uuid.uuid4())
         
-        if conversation_id:
-            # Check if agent exists in memory
-            agent_executor = conversation_agents.get(conversation_id)
-            
-            if not agent_executor:
-                # Check if conversation exists in database
-                with get_db() as db:
-                    conversation = db.query(Conversation).filter(
-                        Conversation.id == conversation_id
-                    ).first()
-                    
-                    if conversation:
-                        # Restore agent from database with context window
-                        agent_executor = setup_agent(tools, memory_manager, conversation_id, context_window=CONTEXT_WINDOW_SIZE)
-                        conversation_agents[conversation_id] = agent_executor
-                    else:
-                        # Create new conversation if it doesn't exist
-                        conversation_id = str(uuid.uuid4())
-                        agent_executor = setup_agent(tools, memory_manager, conversation_id, context_window=CONTEXT_WINDOW_SIZE)
-                        conversation_agents[conversation_id] = agent_executor
+        # Create new agent executor if it doesn't exist
+        if not conversation_id in conversation_agents:
+            agent_executor, client = await setup_agent(memory_manager, conversation_id, context_window=CONTEXT_WINDOW_SIZE)
+            conversation_agents[conversation_id] = (agent_executor, client)
         else:
-            # Create new conversation with UUID
-            conversation_id = str(uuid.uuid4())
-            agent_executor = setup_agent(tools, memory_manager, conversation_id, context_window=CONTEXT_WINDOW_SIZE)
-            conversation_agents[conversation_id] = agent_executor
+            agent_executor, client = conversation_agents[conversation_id]
         
         # Add user message to memory
         await memory_manager.add_user_message(conversation_id, request.input)
+        print("Processing message...")
         
-        # Process the message
         response = await agent_executor.ainvoke(
             {"input": request.input}
         )
+        print("Message processed")
+        
         # Add AI response to memory
-        await memory_manager.add_ai_message(conversation_id, response["output"])
+        await memory_manager.add_ai_message(conversation_id, response["output"].rstrip() if isinstance(response["output"], str) else str(response["output"]).rstrip())
         
         return ChatResponse(
             output=response["output"],
@@ -170,7 +137,7 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         logging.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

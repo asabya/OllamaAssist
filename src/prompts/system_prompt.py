@@ -2,8 +2,6 @@ from dataclasses import dataclass
 from typing import Optional
 import yaml
 
-from src.tools import alpha
-
 @dataclass
 class SystemPrompt:
     BASE_PROMPT = """You are an AI assistant and expert in crypto with access to a flexible set of tools through the Model Context Protocol (MCP) that you can use when helpful for tasks.
@@ -137,7 +135,7 @@ You will remain aware of your current capabilities and available tools throughou
 
     def get_full_prompt(self):
         # Include all instructions in the full prompt with proper ordering
-        all_instructions = [self.BASE_PROMPT, alpha.PROMPT]
+        all_instructions = [self.BASE_PROMPT]
         
         # Process and add character instructions
         if self.character_instructions:

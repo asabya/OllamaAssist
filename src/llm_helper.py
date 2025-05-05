@@ -15,7 +15,6 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain.agents import AgentExecutor, create_tool_calling_agent, create_openai_tools_agent
 from langchain.agents.output_parsers.tools import ToolAgentAction, ToolsAgentOutputParser
-from .tools.registry import ToolRegistry
 from .prompts.system_prompt import SystemPrompt
 from .config import config
 
