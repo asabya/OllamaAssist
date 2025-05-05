@@ -17,11 +17,13 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 
 import re
 
+from src.handlers import UsageTrackingHandler
 from src.mcp_client import mcp
 from src.prompts.system_prompt import SystemPrompt
 from src.llm_factory import LLMFactory
 from src.memory_manager import MemoryManager
 from src.llm_helper import MCPToolWrapper
+from src.database import get_db, Message
 
 # Configure logging
 log_dir = "logs"
@@ -56,7 +58,6 @@ class CustomJSONAgentOutputParser(AgentOutputParser):
                 action_input = response.get("action_input", {})
                 
                 if action == "Final Answer":
-                    print("Action finish 1")
                     return AgentFinish(
                         return_values={"output": action_input.strip() if isinstance(action_input, str) else str(action_input).strip()},
                         log=text,
@@ -71,36 +72,32 @@ class CustomJSONAgentOutputParser(AgentOutputParser):
                 print(f"\n\nJSON decode error: {e}")
                 pass  # Fall through to natural language handling
 
-        # else check if clean_text is a valid JSON
-        try:
-            finish = json.loads(clean_text)
-            return AgentFinish(
-                return_values={"output": str(finish).strip()},
-                log=text,
-            )
-        except json.JSONDecodeError as e:
-            print(f"\n\nJSON decode error: {e}")
-            pass  # Fall through to natural language handling
-        
-        # If no valid JSON found, treat as a natural conversation response
-        if not any(tool_indicator in clean_text.lower() for tool_indicator in ["action", "tool", "function"]):
-            return AgentFinish(
-                return_values={"output": clean_text.strip()},
-                log=text,
-            )
+        return AgentFinish(
+            return_values={"output": clean_text.strip()},
+            log=text,
+        )
             
         # If it looks like a tool usage but not in JSON format, raise error
         raise ValueError(f"Could not parse response. Expected JSON format for tool usage: {text}")
 
 def format_log_to_messages(intermediate_steps):
-    """Format intermediate steps into chat messages"""
+    """Format intermediate steps into chat messages and update database
+    
+    Args:
+        intermediate_steps: List of (action, observation) tuples from agent execution
+    """
     messages = []
+   
     for action, observation in intermediate_steps:
-        # Combine the tool call and its response into a single assistant message
-        messages.append({
-            "role": "assistant",
-            "content": f"I will use the {action.tool} tool with input: {json.dumps(action.tool_input)}\n\nTool response: {str(observation)}".rstrip()
-        })
+            # Format the message content
+            content = f"I will use the {action.tool} tool with input: {json.dumps(action.tool_input)}\n\nTool response: {str(observation)}".rstrip()
+            
+            # Add to messages list for return
+            messages.append({
+                "role": "assistant",
+                "content": content
+            })
+    
     return messages
 
 def load_config():
@@ -175,6 +172,9 @@ async def setup_agent(memory_manager: MemoryManager, conversation_id: str, conte
         tool_names=tool_names
     )
     print("Prompt template created")
+
+    usage_handler = UsageTrackingHandler(conversation_id)
+
     
     # Create the agent with windowed chat history
     agent = (
@@ -184,7 +184,7 @@ async def setup_agent(memory_manager: MemoryManager, conversation_id: str, conte
             "chat_history": lambda x: memory_manager.get_conversation_history(conversation_id, limit=context_window),
         }
         | prompt
-        | llm
+        | llm.with_config({"callbacks": [usage_handler]})
         | CustomJSONAgentOutputParser()
     )
     
@@ -194,7 +194,8 @@ async def setup_agent(memory_manager: MemoryManager, conversation_id: str, conte
         tools=tools,
         verbose=True,
         handle_parsing_errors=True,
-        max_iterations=5
+        max_iterations=5,
+        return_intermediate_steps=True
     )
     
     return agent_executor, client
@@ -276,14 +277,17 @@ async def chat_loop():
                 # Process user input through the agent
                 print("\n⏳ Thinking...")
                 print("\nMessages being sent to LLM:")
-                messages = await memory_manager.get_conversation_history(conversation_id)
+                messages = memory_manager.get_conversation_history(conversation_id)
                 for msg in messages:
                     print(f"Role: {msg.type}, Content: {msg.content}")
                 
                 response = await agent_executor.ainvoke({"input": user_input})
                 
-                # Add AI response to memory
-                await memory_manager.add_ai_message(conversation_id, response["output"])
+                # Add AI response to memory with metadata
+                await memory_manager.add_ai_message(
+                    conversation_id=conversation_id,
+                    content=response["output"].rstrip() if isinstance(response["output"], str) else str(response["output"]).rstrip()
+                )
                 
                 # Print the response
                 print("\n🤖 Assistant:", response["output"])

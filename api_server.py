@@ -1,4 +1,5 @@
 import traceback
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -19,8 +20,8 @@ from langchain.agents.agent import AgentOutputParser
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain.schema import SystemMessage
 
-from cli_chat import setup_agent, format_log_to_messages
-from src.database import Conversation, get_db
+from cli_chat import setup_agent
+from src.database import Base, engine
 from src.prompts.system_prompt import SystemPrompt
 from src.llm_factory import LLMFactory
 from src.memory_manager import MemoryManager
@@ -37,10 +38,25 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for database initialization"""
+    try:
+        Base.metadata.create_all(bind=engine)
+        logging.info("Database tables dropped and recreated successfully")
+        yield
+    except Exception as e:
+        logging.error(f"Failed to initialize database: {str(e)}\n{traceback.format_exc()}")
+        raise
+    finally:
+        # Cleanup (if needed) when the app shuts down
+        pass
+
 app = FastAPI(
     title="Chat API",
     description="API for chat interactions with Claude and tools using LangChain",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -55,6 +71,8 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     input: str
     conversation_id: Optional[str] = None
+    user_id: Optional[str] = None
+    title: Optional[str] = None
 
 class ChatResponse(BaseModel):
     output: str
@@ -101,6 +119,8 @@ async def chat_endpoint(request: ChatRequest):
     Request body:
     - input: User's message
     - conversation_id: Optional ID to continue a conversation
+    - user_id: Optional user identifier
+    - title: Optional conversation title
     
     Returns:
     - output: Assistant's response
@@ -118,16 +138,24 @@ async def chat_endpoint(request: ChatRequest):
             agent_executor, client = conversation_agents[conversation_id]
         
         # Add user message to memory
-        await memory_manager.add_user_message(conversation_id, request.input)
+        await memory_manager.add_user_message(
+            conversation_id=conversation_id,
+            content=request.input,
+            user_id=request.user_id,
+            title=request.title
+        )
         print("Processing message...")
         
         response = await agent_executor.ainvoke(
             {"input": request.input}
         )
-        print("Message processed")
         
-        # Add AI response to memory
-        await memory_manager.add_ai_message(conversation_id, response["output"].rstrip() if isinstance(response["output"], str) else str(response["output"]).rstrip())
+        # Add AI response to memory with metadata
+        await memory_manager.add_ai_message(
+            conversation_id=conversation_id,
+            content=response["output"].rstrip() if isinstance(response["output"], str) else str(response["output"]).rstrip(),
+            title=request.title
+        )
         
         return ChatResponse(
             output=response["output"],

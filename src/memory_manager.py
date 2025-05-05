@@ -1,18 +1,18 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 import json
 from pydantic import BaseModel, Field
 from langgraph.graph import Graph, StateGraph
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, BaseMessage
 
-from src.database import Conversation, Message, get_db
+from src.database import Message, Conversation, get_db
 
 class ConversationState(BaseModel):
     """State model for conversation memory"""
     messages: List[BaseMessage] = Field(default_factory=list)
     current_user: Optional[str] = None
     conversation_id: Optional[str] = None
-    conversation_metadata: Dict[str, Any] = Field(default_factory=dict)
+    title: Optional[str] = None
     last_updated: datetime = Field(default_factory=datetime.now)
     
     def add_message(self, message: BaseMessage) -> None:
@@ -45,17 +45,8 @@ class MemoryManager:
                 state["last_updated"] = datetime.now()
             return state
         
-        def update_metadata_node(state: Dict) -> Dict:
-            """Node for updating metadata"""
-            if "metadata_update" in state:
-                state["conversation_metadata"].update(state["metadata_update"])
-                state["last_updated"] = datetime.now()
-            return state
-        
         workflow = StateGraph(Dict)
         workflow.add_node("add_message", add_message_node)
-        workflow.add_node("update_metadata", update_metadata_node)
-        workflow.add_edge("add_message", "update_metadata")
         workflow.set_entry_point("add_message")
         
         return workflow.compile()
@@ -64,8 +55,7 @@ class MemoryManager:
         """Convert BaseMessage to database format"""
         return {
             "type": type(message).__name__,
-            "content": message.content,
-            "additional_kwargs": message.additional_kwargs
+            "content": message.content
         }
     
     def _db_to_message(self, db_message: Message) -> BaseMessage:
@@ -76,54 +66,55 @@ class MemoryManager:
             "SystemMessage": SystemMessage
         }
         message_class = message_types[db_message.type]
+        
+        # Extract usage metadata if it exists
+        additional_kwargs = {}
+        if db_message.input_tokens is not None:
+            additional_kwargs['usage_metadata'] = {
+                'input_tokens': db_message.input_tokens,
+                'output_tokens': db_message.output_tokens,
+                'total_tokens': db_message.total_tokens,
+                'input_token_details': {
+                    'cache_read': db_message.cache_read,
+                    'cache_creation': db_message.cache_creation
+                }
+            }
+        if db_message.tool_calls:
+            additional_kwargs['tool_calls'] = db_message.tool_calls
+            
         return message_class(
             content=db_message.content,
-            additional_kwargs=db_message.additional_kwargs
+            additional_kwargs=additional_kwargs
         )
     
-    def get_or_create_state(self, conversation_id: str, user_id: Optional[str] = None) -> ConversationState:
+    def get_or_create_state(self, conversation_id: str, user_id: Optional[str] = None, title: Optional[str] = None) -> ConversationState:
         """Get an existing conversation state or create a new one from the database"""
         with get_db() as db:
-            conversation = db.query(Conversation).filter(
-                Conversation.id == conversation_id
-            ).first()
+            # Get or create conversation
+            conversation = Conversation.get_or_create(db, conversation_id, title=title, user_id=user_id)
             
-            if not conversation:
-                conversation = Conversation(
-                    id=conversation_id,
-                    current_user=user_id,
-                    conversation_metadata={},
-                    last_updated=datetime.now()
-                )
-                db.add(conversation)
-                db.commit()
-                db.refresh(conversation)
-            
-            messages = [self._db_to_message(msg) for msg in conversation.messages]
+            messages = db.query(Message).filter(
+                Message.conversation_id == conversation_id
+            ).order_by(Message.created_at).all()
             
             return ConversationState(
-                messages=messages,
-                current_user=conversation.current_user,
-                conversation_id=conversation.id,
-                conversation_metadata=conversation.conversation_metadata,
-                last_updated=conversation.last_updated
+                messages=[self._db_to_message(msg) for msg in messages],
+                current_user=user_id,
+                conversation_id=conversation_id,
+                title=conversation.title,
+                last_updated=conversation.updated_at
             )
     
-    async def add_user_message(self, conversation_id: str, content: str, user_id: Optional[str] = None) -> None:
+    async def add_user_message(self, conversation_id: str, content: str, user_id: Optional[str] = None, title: Optional[str] = None) -> None:
         """Add a user message to the conversation"""
         message = HumanMessage(content=content)
         
         with get_db() as db:
-            conversation = db.query(Conversation).filter(
-                Conversation.id == conversation_id
-            ).first()
-            
-            if not conversation:
-                conversation = Conversation(
-                    id=conversation_id,
-                    current_user=user_id
-                )
-                db.add(conversation)
+            # Ensure conversation exists and update title if provided
+            conversation = Conversation.get_or_create(db, conversation_id, title=title, user_id=user_id)
+            if title and conversation.title != title:
+                conversation.title = title
+            db.flush()
             
             db_message = Message(
                 conversation_id=conversation_id,
@@ -132,46 +123,117 @@ class MemoryManager:
             db.add(db_message)
             db.commit()
     
-    async def add_ai_message(self, conversation_id: str, content: str) -> None:
-        """Add an AI message to the conversation"""
-        message = AIMessage(content=content)
-        
-        with get_db() as db:
-            db_message = Message(
-                conversation_id=conversation_id,
-                **self._message_to_db(message)
-            )
-            db.add(db_message)
-            db.commit()
-    
-    def get_conversation_history(self, conversation_id: str, limit: Optional[int] = None) -> List[BaseMessage]:
-        """Get the conversation history from the database
+    async def add_ai_message(self, conversation_id: str, content: str, message_id: Optional[str] = None, title: Optional[str] = None) -> None:
+        """Add an AI message to the conversation
         
         Args:
             conversation_id: ID of the conversation
-            limit: Maximum number of most recent messages to return
+            content: The message content
+            message_id: Optional external message ID
+            title: Optional conversation title to update
+        """
+        message = AIMessage(content=content)
+        
+        with get_db() as db:
+            # Get existing conversation (don't create new one for AI messages)
+            conversation = db.query(Conversation).filter(
+                Conversation.conversation_id == conversation_id
+            ).first()
             
-        Returns:
-            List of messages in the conversation, ordered by creation time
+            if conversation and title and conversation.title != title:
+                conversation.title = title
+                db.commit()
+            
+            message_data = {
+                **self._message_to_db(message),
+                'conversation_id': conversation_id,
+                'message_id': message_id
+            }
+            
+            # Use the upsert_message method to handle updates
+            Message.upsert_message(db, message_data)
+    
+    def update_conversation(self, conversation_id: str, title: Optional[str] = None, user_id: Optional[str] = None) -> None:
+        """Update conversation attributes
+        
+        Args:
+            conversation_id: ID of the conversation
+            title: New title for the conversation
+            user_id: New user ID for the conversation
         """
         with get_db() as db:
-            if limit:
-                # Get the most recent messages when limit is specified
-                messages = db.query(Message).filter(
-                    Message.conversation_id == conversation_id
-                ).order_by(Message.created_at.desc()).limit(limit).all()
-                # Reverse the messages to get chronological order
-                messages = messages[::-1]
-            else:
-                # Get all messages in chronological order
-                messages = db.query(Message).filter(
-                    Message.conversation_id == conversation_id
-                ).order_by(Message.created_at).all()
+            updates = {}
+            if title is not None:
+                updates['title'] = title
+            if user_id is not None:
+                updates['user_id'] = user_id
             
+            if updates:
+                Conversation.update_conversation(db, conversation_id, **updates)
+
+    def get_all_conversations(self) -> List[Dict[str, Any]]:
+        """Get all conversations with their basic information"""
+        with get_db() as db:
+            conversations = db.query(Conversation).order_by(Conversation.updated_at.desc()).all()
+            return [{
+                'conversation_id': conv.conversation_id,
+                'user_id': conv.user_id,
+                'title': conv.title,
+                'created_at': conv.created_at,
+                'updated_at': conv.updated_at
+            } for conv in conversations]
+
+    def get_user_conversations(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all conversations for a specific user"""
+        with get_db() as db:
+            conversations = db.query(Conversation).filter(
+                Conversation.user_id == user_id
+            ).order_by(Conversation.updated_at.desc()).all()
+            return [{
+                'conversation_id': conv.conversation_id,
+                'title': conv.title,
+                'created_at': conv.created_at,
+                'updated_at': conv.updated_at
+            } for conv in conversations]
+
+    def get_conversation_history(self, conversation_id: str, limit: Optional[int] = None) -> List[BaseMessage]:
+        """Get the conversation history for a specific conversation
+        
+        Args:
+            conversation_id: ID of the conversation
+            limit: Optional limit on number of messages to return (most recent)
+            
+        Returns:
+            List of BaseMessage objects representing the conversation history
+        """
+        with get_db() as db:
+            query = db.query(Message).filter(
+                Message.conversation_id == conversation_id
+            ).order_by(Message.created_at)
+            
+            if limit:
+                query = query.limit(limit)
+                
+            messages = query.all()
             return [self._db_to_message(msg) for msg in messages]
-    
+
+    def delete_conversation(self, conversation_id: str) -> None:
+        """Delete a conversation and all its messages"""
+        with get_db() as db:
+            # Delete all messages first
+            db.query(Message).filter(
+                Message.conversation_id == conversation_id
+            ).delete()
+            
+            # Delete the conversation
+            db.query(Conversation).filter(
+                Conversation.conversation_id == conversation_id
+            ).delete()
+            
+            db.commit()
+
     def clear_conversation(self, conversation_id: str) -> None:
-        """Clear a conversation's history from the database"""
+        """Clear a conversation's messages but keep the conversation record"""
         with get_db() as db:
             db.query(Message).filter(
                 Message.conversation_id == conversation_id
@@ -181,25 +243,36 @@ class MemoryManager:
     def save_state(self, file_path: str) -> None:
         """Export conversation states to a file"""
         with get_db() as db:
+            # Get all conversations
             conversations = db.query(Conversation).all()
             serialized_states = {}
             
             for conv in conversations:
-                messages = []
-                for msg in conv.messages:
-                    messages.append({
+                messages = db.query(Message).filter(
+                    Message.conversation_id == conv.conversation_id
+                ).order_by(Message.created_at).all()
+                
+                serialized_states[conv.conversation_id] = {
+                    "title": conv.title,
+                    "user_id": conv.user_id,
+                    "created_at": conv.created_at.isoformat(),
+                    "updated_at": conv.updated_at.isoformat(),
+                    "messages": []
+                }
+                
+                for msg in messages:
+                    message_data = {
                         "type": msg.type,
                         "content": msg.content,
-                        "additional_kwargs": msg.additional_kwargs
-                    })
-                
-                serialized_states[conv.id] = {
-                    "messages": messages,
-                    "current_user": conv.current_user,
-                    "conversation_id": conv.id,
-                    "conversation_metadata": conv.conversation_metadata,
-                    "last_updated": conv.last_updated.isoformat()
-                }
+                        "message_id": msg.message_id,
+                        "input_tokens": msg.input_tokens,
+                        "output_tokens": msg.output_tokens,
+                        "total_tokens": msg.total_tokens,
+                        "cache_read": msg.cache_read,
+                        "cache_creation": msg.cache_creation,
+                        "tool_calls": msg.tool_calls
+                    }
+                    serialized_states[conv.conversation_id]["messages"].append(message_data)
             
             with open(file_path, 'w') as f:
                 json.dump(serialized_states, f, indent=2)
@@ -211,21 +284,26 @@ class MemoryManager:
         
         with get_db() as db:
             for conv_id, state_data in serialized_states.items():
-                conversation = Conversation(
-                    id=conv_id,
-                    current_user=state_data["current_user"],
-                    conversation_metadata=state_data.get("conversation_metadata", {}),
-                    last_updated=datetime.fromisoformat(state_data["last_updated"])
+                # Create or update conversation
+                conversation = Conversation.get_or_create(
+                    db, 
+                    conv_id,
+                    title=state_data.get("title"),
+                    user_id=state_data.get("user_id")
                 )
-                db.add(conversation)
                 
+                # Add messages
                 for msg_data in state_data["messages"]:
-                    message = Message(
-                        conversation_id=conv_id,
-                        type=msg_data["type"],
-                        content=msg_data["content"],
-                        additional_kwargs=msg_data["additional_kwargs"]
-                    )
-                    db.add(message)
-            
-            db.commit()
+                    message_data = {
+                        "conversation_id": conv_id,
+                        "type": msg_data["type"],
+                        "content": msg_data["content"],
+                        "message_id": msg_data.get("message_id"),
+                        "input_tokens": msg_data.get("input_tokens"),
+                        "output_tokens": msg_data.get("output_tokens"),
+                        "total_tokens": msg_data.get("total_tokens"),
+                        "cache_read": msg_data.get("cache_read"),
+                        "cache_creation": msg_data.get("cache_creation"),
+                        "tool_calls": msg_data.get("tool_calls", [])
+                    }
+                    Message.upsert_message(db, message_data)
