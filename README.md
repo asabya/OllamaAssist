@@ -1,4 +1,6 @@
-# OllamaAssist
+# Cog
+
+Your AI Companion, Engineered for Intelligence
 
 A powerful AI assistant that combines multiple leading language models with the Model Context Protocol (MCP) for advanced tool usage and automation. This project provides both a command-line interface and REST API for interacting with AI models while giving them access to various tools and capabilities.
 
