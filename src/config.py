@@ -1,14 +1,13 @@
 import os
 import json
-import ollama
 from pathlib import Path
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
 class Config:
     # Application settings
-    PAGE_TITLE = "Streamlit+Ollama+MCP"
-    DEFAULT_MODEL = "llama3.2:latest"
+    PAGE_TITLE = "MCP Client"
+    DEFAULT_MODEL = "claude-3-5-sonnet-latest"  # Default Claude model
 
     def __init__(self):
         # Load environment variables
@@ -21,23 +20,21 @@ class Config:
         # Load MCP config
         self.mcp_config = self._load_mcp_config()
         
-        # Initialize Ollama models
-        self._init_ollama_models()
+        # Initialize available models
+        self._init_models()
         
         # Apply environment overrides
         self._apply_env_overrides()
 
-    def _init_ollama_models(self):
-        """Initialize available Ollama models"""
-        try:
-            models_info = ollama.list()
-            self.OLLAMA_MODELS = tuple(model['model'] for model in models_info['models'])
-            
-            # Validate default model
-            if self.DEFAULT_MODEL not in self.OLLAMA_MODELS and self.OLLAMA_MODELS:
-                self.DEFAULT_MODEL = self.OLLAMA_MODELS[0]
-        except Exception as e:
-            self.OLLAMA_MODELS = (self.DEFAULT_MODEL,)
+    def _init_models(self):
+        """Initialize available Claude models"""
+        self.AVAILABLE_MODELS = (
+            "claude-3-5-sonnet-latest"
+        )
+        
+        # Validate default model
+        if self.DEFAULT_MODEL not in self.AVAILABLE_MODELS:
+            self.DEFAULT_MODEL = self.AVAILABLE_MODELS[1]  # Use Sonnet as fallback
             
     def _load_mcp_config(self) -> Dict[str, Any]:
         """Load MCP server configuration from JSON"""
@@ -98,6 +95,14 @@ class Config:
     def log_level(self) -> str:
         """Get logging level"""
         return os.getenv('LOG_LEVEL', 'INFO')
+
+    @property 
+    def anthropic_api_key(self) -> str:
+        """Get Anthropic API key from environment"""
+        api_key = os.getenv('ANTHROPIC_API_KEY')
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is required")
+        return api_key
 
 # Create global config instance
 config = Config()

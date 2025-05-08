@@ -1,52 +1,121 @@
 # OllamaAssist
 
-A Streamlit interface for Ollama models with full MCP (Model Context Protocol) integration. Works with any tool-calling capable model like deepseek-r1-tool-calling:14b or llama2:latest.
+A powerful AI assistant that combines multiple leading language models with the Model Context Protocol (MCP) for advanced tool usage and automation. This project provides both a command-line interface and REST API for interacting with AI models while giving them access to various tools and capabilities.
 
-## Key Features
+## 🌟 Key Features
 
-- **Local LLM Execution**: Run models locally using Ollama (deepseek-r1)
-- **MCP Integration**: Universal tool protocol support
-- **Streamlit Interface**: Real-time streaming chat interface
-- **Dynamic Tool Support**: Automatic capability detection
+- **Multiple LLM Support**: 
+  - Anthropic
+  - OpenAI
+  - xAI
+- **Advanced Tool Usage**: Full MCP (Model Context Protocol) integration for powerful tool capabilities
+- **Multiple Interfaces**: 
+  - Interactive CLI for direct usage
+  - REST API for programmatic access
+- **Conversation Management**: Persistent storage and retrieval of chat histories
+- **Dynamic Tool Discovery**: Automatic detection and integration of MCP-compatible tools
+- **Usage Tracking**: Built-in monitoring of model usage and performance
 
-## What is MCP (Model Context Protocol)?
+## 🧠 Understanding the Core Concepts
 
-[MCP](https://modelcontextprotocol.io) is a universal protocol that standardizes how AI models interact with tools and services. It provides:
+### Large Language Models (LLMs)
 
-- **Universal Tool Interface**: Common protocol for all AI tools
-- **Standardized Messages**: Consistent communication format
-- **Discoverable Capabilities**: Self-describing tools and services
-- **Language Agnostic**: Works with any programming language
-- **Growing Ecosystem**: [Many tools available](https://github.com/modelcontextprotocol/servers)
+1. **Anthropic**
+   - Advanced reasoning capabilities
+   - Extensive tool integration support
+   - Configurable parameters
 
-Learn more:
-- [MCP Documentation](https://modelcontextprotocol.io)
-- [MCP Specification](https://spec.modelcontextprotocol.io)
-- [Official Servers](https://github.com/modelcontextprotocol/servers)
+2. **OpenAI**
+   - State-of-the-art performance
+   - Robust tool handling
+   - Advanced configuration options
 
-## Prerequisites
+3. **X.AI**
+   - Latest AI technology
+   - Custom API endpoint support
+   - Flexible deployment options
 
-- Python 3.9+
-- Ollama desktop app installed and running
-- MCP-compatible tools
-- python-dotenv
-- An Ollama-compatible model with tool-calling support
+Each provider can be configured with:
+- Custom temperature settings
+- Token limit adjustments
+- API key configuration
+- Provider-specific parameters
 
-## Installation
+### Model Context Protocol (MCP)
+MCP is a universal protocol that standardizes how AI models interact with tools and services:
+- **Tool Definition**: Tools describe their capabilities and requirements in a standard format
+- **Structured Communication**: Models and tools communicate through a defined protocol
+- **Dynamic Discovery**: Tools can be added or removed without changing the core system
+- **Language Agnostic**: Works with any programming language or framework
 
-1. Prerequisites:
+## 🏗️ Architecture
+
+### Core Components
+
+1. **API Server** (`api_server.py`):
+   - FastAPI-based REST API
+   - Handles chat requests and responses
+   - Manages conversation state
+   - Provides tool listing and usage endpoints
+
+2. **CLI Interface** (`cli_chat.py`):
+   - Interactive command-line interface
+   - Direct model interaction
+   - Tool exploration and usage
+   - Conversation saving/loading
+
+3. **Memory Management** (`src/memory_manager.py`):
+   - Persistent storage of conversations
+   - Chat history retrieval
+   - Context window management
+   - Message formatting and processing
+
+4. **LLM Integration** (`src/llm_factory.py`, `src/llm_helper.py`):
+   - Model initialization and configuration
+   - Response parsing and formatting
+   - Tool integration with models
+   - Usage tracking and monitoring
+
+6. **Database Layer** (`src/database.py`):
+   - SQLAlchemy ORM
+   - Message storage
+   - Conversation tracking
+   - Usage statistics
+
+### Data Flow
+
+1. User sends a message through any interface (rest API/CLI)
+2. Message is processed by the agent system
+3. LLM receives the message with context and available tools
+4. Model decides if tool usage is needed
+5. If tools are needed, requests are sent through MCP
+6. Results are incorporated into the model's response
+7. Final response is returned to the user
+8. Conversation is saved to the database
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+1. **System Requirements**:
+   - Python 3.9+
+   - API keys for desired providers:
+     - ANTHROPIC_API_KEY
+     - OPENAI_API_KEY
+     - GROK_API_KEY
+   - Sufficient storage for conversation history
+
+2. **API Keys Setup**:
    ```bash
-   # Install Ollama desktop app from https://ollama.ai/download
-   
-   # Make sure Ollama is running
-   # Then pull the recommended model (or choose another tool-calling capable model)
-   ollama pull MFDoom/deepseek-r1-tool-calling:14b
-   
-   # Alternative models that support tool calling:
-   # ollama pull llama2:latest
+   # Add to your environment or .env file
+   export ANTHROPIC_API_KEY=your_anthropic_key_here
+   export OPENAI_API_KEY=your_openai_key_here
+   export GROK_API_KEY=your_grok_key_here
    ```
 
-2. Setup:
+### Installation
+
+1. **Clone and Setup**:
    ```bash
    git clone https://github.com/madtank/OllamaAssist.git
    cd OllamaAssist
@@ -55,166 +124,195 @@ Learn more:
    pip install -r requirements.txt
    ```
 
-## Environment Configuration
-
-OllamaAssist uses environment variables for configuration. Create a `.env` file:
-
-```properties
-# Brave Search Configuration
-BRAVE_API_KEY=your_api_key_here
-
-# Optional: Override default commands
-#BRAVE_COMMAND=docker
-#BRAVE_ARGS=run -i --rm -e BRAVE_API_KEY mcp/brave-search
-
-# Filesystem Configuration
-#FILESYSTEM_PATHS=/path1:/path2:/path3
-```
-
-Variables can be:
-- Set in .env file
-- Commented out to use defaults
-- Override using environment variables
-
-## MCP Configuration
-
-OllamaAssist uses MCP to provide powerful capabilities through standardized tools. Configure available tools in `mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "brave-search": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
-      "env": {
-        "BRAVE_API_KEY": "your-api-key-here"
-      }
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/allowed/path"]
-    }
-  }
-}
-```
-
-### Available MCP Servers
-
-The project supports various MCP servers:
-
-#### Core Functionality
-- **brave-search** - Web and local search capabilities
-- **filesystem** - Secure file operations
-- **chromadb** - Vector database operations
-- **postgres** - SQL database integration
-- **mcp-memory** - Long-term context persistence
-- **sqlite** - Lightweight database operations
-
-#### AI & Development
-- **huggingface** - Model and dataset access
-- **langchain** - AI workflow integration
-- **git** - Repository operations
-- **jupyter** - Notebook integration
-
-Check out [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers) for more.
-
-### Adding MCP Servers
-
-1. Each server entry needs:
-   - `command`: The MCP tool executable
-   - `args`: Optional command line arguments
-   - `env`: Environment variables (like API keys)
-
-2. Common MCP servers:
-   - `brave-search`: Web search (requires Brave API key)
-   - `filesystem`: Local file operations
-   - `sequential-thinking`: Self-reflection capabilities
-   - Add your own MCP-compatible tools!
-
-### Configuring API Keys
-
-For services requiring authentication:
-
-1. Get your API key (e.g., Brave Search API)
-2. Add it to the appropriate server's `env` section
-3. Never commit API keys to version control
-
-## Using MCP Tools
-
-Example tool implementation:
-```python
-async def brave(action: str, query: str = "", count: int = 5) -> Any:
-    """Brave Search API wrapper"""
-    server_name = "brave-search"
-    return await mcp(
-        server=server_name,
-        tool=f"brave_{action}_search",
-        arguments={"query": query, "count": count}
-    )
-```
-
-## Adding Custom MCP Tools
-
-1. Create an MCP-compatible tool
-2. Add it to `mcp_config.json`
-3. The tool will be automatically available to the chatbot
-
-## Running the Application
-
-1. Ensure Ollama desktop app is running
-2. Launch OllamaAssist:
-   ```bash
-   streamlit run streamlit_app.py
+2. **Configuration**:
+   Create a `.env` file:
+   ```properties
+   # LLM API Keys
+   ANTHROPIC_API_KEY=your_anthropic_key_here
+   OPENAI_API_KEY=your_openai_key_here
+   GROK_API_KEY=your_grok_key_here
    ```
 
-## Testing
+3. **LLM Configuration**:
+   Configure your preferred provider in `config.json`:
+   ```json
+   {
+     "llm": {
+       "provider": "anthropic",  // or "openai" or "grok"
+       "settings": {
+         "temperature": 0,
+         "max_tokens": 4096
+       }
+     }
+   }
+   ```
 
-Run tests:
+## 🎯 Usage
+
+### CLI Interface
+The command-line interface provides an interactive way to chat with the AI:
+
 ```bash
-python -m pytest tests/test_tools.py -v
+python cli_chat.py
 ```
 
-## Development
+Features:
+- Interactive chat session
+- Tool exploration and usage
+- Conversation saving/loading
+- Command history
+- Real-time responses
 
-### Creating MCP Tools
-
-Want to create your own MCP tool? Follow these guides:
-- [Building MCP Servers](https://modelcontextprotocol.io/docs/build-server)
-- [Python SDK](https://github.com/modelcontextprotocol/python-sdk)
-- [Server Examples](https://github.com/modelcontextprotocol/servers/tree/main/examples)
-
-### Testing MCP Tools
-
-Use the MCP Inspector to test your tools:
+Available commands:
 ```bash
-mcp dev your_server.py
+/help     - Show available commands
+/tools    - List available tools
+/save     - Save current conversation
+/load     - Load a saved conversation
+/clear    - Start a new conversation
+/exit     - Exit the application
 ```
 
-Or install in Claude Desktop:
+### API Server
+Run the API server for programmatic access:
+
 ```bash
-mcp install your_server.py
+uvicorn api_server:app --host 0.0.0.0 --port 8000
 ```
 
-## Contributing
+### API Endpoints
+
+1. **Chat** (`POST /chat`):
+   ```json
+   {
+     "input": "Your message here",
+     "conversation_id": "optional-id",
+     "user_id": "optional-user-id",
+     "title": "optional-title"
+   }
+   ```
+   Response:
+   ```json
+   {
+     "output": "AI response",
+     "conversation_id": "conversation-uuid"
+   }
+   ```
+
+2. **Tools** (`GET /tools`):
+   - Lists available tools and their capabilities
+   ```json
+   {
+     "tools": [
+       {
+         "name": "tool_name",
+         "description": "Tool description",
+         "parameters": {
+           "param1": {"type": "string", "description": "..."},
+           "param2": {"type": "integer", "description": "..."}
+         }
+       }
+     ]
+   }
+   ```
+
+3. **Conversations** (`GET /conversations`):
+   - Retrieves conversation history
+   ```json
+   {
+     "conversations": [
+       {
+         "id": "conversation-uuid",
+         "title": "Conversation title",
+         "created_at": "timestamp",
+         "messages": [...]
+       }
+     ]
+   }
+   ```
+
+## 🔧 Development
+
+### Adding New Tools
+
+1. Create an MCP-compatible tool:
+   ```python
+   from mcp_core import MCPTool
+   
+   class MyTool(MCPTool):
+       name = "my_tool"
+       description = "Tool description"
+       
+       async def execute(self, **kwargs):
+           # Tool implementation
+           pass
+   ```
+
+2. Add to `mcp_config.json`:
+   ```json
+   {
+     "mcpServers": {
+       "my-tool": {
+         "command": "python",
+         "args": ["my_tool.py"]
+       }
+     }
+   }
+   ```
+
+### Testing
+
+```bash
+# Run all tests
+python -m pytest
+
+# Run specific test file
+python -m pytest tests/test_tools.py
+
+# Run with coverage
+coverage run -m pytest
+coverage report
+```
+
+## 📚 Advanced Topics
+
+### Context Window Management
+The system maintains a sliding window of conversation history to:
+- Prevent context overflow
+- Maintain relevant information
+- Optimize model performance
+
+### Tool Chaining
+Models can use multiple tools in sequence to:
+- Break down complex tasks
+- Combine tool capabilities
+- Handle multi-step operations
+
+### Error Handling
+The system includes robust error handling for:
+- Tool failures
+- Model errors
+- Network issues
+- Invalid inputs
+
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Test your changes
-4. Submit a pull request
+3. Implement your changes
+4. Add tests for new functionality
+5. Submit a pull request
 
-## Roadmap
-
-- [ ] Additional MCP server integrations
-- [ ] Enhanced model capability detection
-- [ ] Advanced tool chaining
-- [ ] UI improvements for tool interactions
-
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
-- [MCP](https://github.com/llmOS/mcp) for the universal tool protocol
-- [Ollama](https://github.com/jmorganca/ollama) for local LLM execution
-- [Streamlit](https://streamlit.io/) for the web interface
+- [MCP](https://modelcontextprotocol.io) for the universal tool protocol
+- [FastAPI](https://fastapi.tiangolo.com/) for the API server
+- [LangChain](https://langchain.com/) for the agent framework
+- [Anthropic](https://anthropic.com) for Claude
+- [OpenAI](https://openai.com) for GPT-4
+- [X.AI](https://x.ai) for Grok
+- [madtank](https://github.com/madtank/OllamaAssist.git) for the initial idea
