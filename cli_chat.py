@@ -21,8 +21,6 @@ from src.handlers import UsageTrackingHandler
 from src.prompts.system_prompt import SystemPrompt
 from src.llm_factory import LLMFactory
 from src.memory_manager import MemoryManager
-from src.llm_helper import MCPToolWrapper
-from src.database import get_db, Message
 
 # Configure logging
 log_dir = "logs"
@@ -126,7 +124,7 @@ async def setup_agent(memory_manager: MemoryManager, conversation_id: str, conte
     
     # Initialize the LLM using the factory
     llm = LLMFactory.create_llm(llm_config)
-    print(f"LLM initialized: {llm_config['provider']}")
+    print(f"LLM initialized: {llm_config.get('provider', 'anthropic')}")
     
     # Initialize MCP clients using MultiServerMCPClient
     mcp_servers = config.get("mcpServers", {})
@@ -149,19 +147,18 @@ async def setup_agent(memory_manager: MemoryManager, conversation_id: str, conte
 
     content = [
         {
-            "text": f"{system_prompt.get_full_prompt()}\n\nTools available:\n{tools_description}\n\nTool names: {tool_names}",
+            "text": f"{system_prompt.get_full_prompt()}",
             "type": "text"
         }
     ]
-    provider = config.get("provider", "anthropic").lower()
+    provider = llm_config.get("provider", "anthropic").lower()
     # special case for anthropic to ensure the system prompt is cached
     if provider == "anthropic":
         content[0]["cache_control"] = {"type": "ephemeral"}
-    
     # Create the prompt template with required variables
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(
-            content=content
+            content=system_prompt.get_full_prompt(),
         ),
         MessagesPlaceholder(variable_name="chat_history"),
         HumanMessagePromptTemplate.from_template("{input}"),
@@ -173,7 +170,6 @@ async def setup_agent(memory_manager: MemoryManager, conversation_id: str, conte
     print("Prompt template created")
 
     usage_handler = UsageTrackingHandler(conversation_id)
-
     
     # Create the agent with windowed chat history
     agent = (

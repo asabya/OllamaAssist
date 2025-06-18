@@ -164,3 +164,4 @@ cython_debug/
 .DS_Store
 .vscode/settings.json
 mcp_config.json
+tgbot/.idea/

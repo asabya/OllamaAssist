@@ -233,6 +233,38 @@ uvicorn api_server:app --host 0.0.0.0 --port 8000
    }
    ```
 
+### Telegram Bot Interface
+The Telegram bot interface provides a convenient way to interact with the AI through Telegram:
+
+```bash
+python telegram_bot.py
+```
+
+Features:
+- Start new conversations with `/start`
+- Load existing conversations with `/start <conversation_id>`
+- List recent conversations with `/list [number]`
+- View available servers with `/servers`
+- Persistent conversation storage
+- Real-time responses
+
+Setup:
+1. Create a new bot through [@BotFather](https://t.me/botfather) on Telegram
+2. Get your bot token
+3. Add the token to your `.env` file:
+   ```properties
+   TELEGRAM_BOT_TOKEN=your_bot_token_here
+   ```
+4. Run the bot using the command above
+
+Bot Commands:
+```
+/start - Start a new conversation
+/start <id> - Load an existing conversation
+/list [n] - List last n conversations (default: 5)
+/servers - List available servers
+```
+
 ## 🔧 Development
 
 ### Adding New Tools
